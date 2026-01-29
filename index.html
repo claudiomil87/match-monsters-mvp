@@ -4,48 +4,10 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-    <title>Match Monsters MVP 🎮</title>
+    <title>Match Monsters 🎮</title>
   </head>
   <body>
-    <div id="app">
-      <header>
-        <h1>🎮 Match Monsters</h1>
-      </header>
-
-      <div class="top-bar">
-        <div class="score-board">
-          <span class="score-label">PONTOS:</span>
-          <span id="score">0</span>
-        </div>
-        <button id="music-btn" class="music-btn" title="Ligar/Desligar música">🔇</button>
-      </div>
-
-      <div class="powerup-section">
-        <div class="energy-bar">
-          <div class="energy-slot" data-index="0"></div>
-          <div class="energy-slot" data-index="1"></div>
-          <div class="energy-slot" data-index="2"></div>
-          <div class="energy-slot" data-index="3"></div>
-        </div>
-        <button id="powerup-btn" class="powerup-btn-big" disabled>
-          <span class="powerup-mystery">❓</span>
-          <span class="powerup-reveal" style="display:none"></span>
-        </button>
-        <span class="powerup-hint">Match 4+ para carregar!</span>
-      </div>
-
-      <div class="game-container">
-        <canvas id="game"></canvas>
-      </div>
-
-      <div class="instructions">
-        <p><strong>👆 Arraste</strong> para mover | <strong>Match 4+</strong> = energia!</p>
-      </div>
-
-      <footer>
-        <p>Criado por <a href="https://github.com/claudiomil87">Cláudio</a> 🤖</p>
-      </footer>
-    </div>
+    <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -1166,4 +1166,15 @@ export class Board {
   public isPowerUpMode(): boolean {
     return this.powerUpMode;
   }
+
+  // Para a IA acessar o grid
+  public getGrid(): (GemType | null)[][] {
+    return this.grid.map(row => row.map(gem => gem?.type || null));
+  }
+
+  // Para a IA executar jogadas
+  public executeMove(from: Position, to: Position): void {
+    if (this.isAnimating) return;
+    this.swapGems(from, to);
+  }
 }

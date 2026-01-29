@@ -2,214 +2,564 @@ import './style.css';
 import { Board } from './Board';
 import { audio } from './Audio';
 import { PowerUpConfig } from './PowerUps';
+import { GameMode, Player, VsAIState, createInitialVsAIState, DEFAULT_CONFIG } from './GameState';
+import { AIPlayer } from './AIPlayer';
+import { GemType } from './types';
 
 class Game {
-  private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D;
-  private board!: Board;
-  private scoreElement: HTMLElement;
-  private musicBtn: HTMLElement;
-  private energySlots: NodeListOf<HTMLElement>;
-  private powerUpBtn: HTMLButtonElement;
-  private powerUpMystery: HTMLElement;
-  private powerUpReveal: HTMLElement;
-  private powerUpHint: HTMLElement;
-
-  private readonly COLS = 7;
-  private readonly ROWS = 5;
-
+  private app: HTMLElement;
+  private currentMode: GameMode = GameMode.MENU;
+  
+  // Solo mode
+  private soloBoard: Board | null = null;
+  private soloCanvas: HTMLCanvasElement | null = null;
+  private soloCtx: CanvasRenderingContext2D | null = null;
+  
+  // VS AI mode
+  private humanBoard: Board | null = null;
+  private aiBoard: Board | null = null;
+  private humanCanvas: HTMLCanvasElement | null = null;
+  private aiCanvas: HTMLCanvasElement | null = null;
+  private humanCtx: CanvasRenderingContext2D | null = null;
+  private aiCtx: CanvasRenderingContext2D | null = null;
+  private vsaiState: VsAIState | null = null;
+  private turnTimer: number | null = null;
+  private aiPlayer: AIPlayer = new AIPlayer();
+  
+  // Touch handling
   private touchStartX: number = 0;
   private touchStartY: number = 0;
   private touchStartTime: number = 0;
   private isDragging: boolean = false;
   private dragThreshold: number = 20;
+  
+  private readonly COLS = 7;
+  private readonly ROWS = 5;
 
   constructor() {
-    this.canvas = document.getElementById('game') as HTMLCanvasElement;
-    this.ctx = this.canvas.getContext('2d')!;
-    this.scoreElement = document.getElementById('score')!;
-    this.musicBtn = document.getElementById('music-btn')!;
-    this.energySlots = document.querySelectorAll('.energy-slot');
-    this.powerUpBtn = document.getElementById('powerup-btn') as HTMLButtonElement;
-    this.powerUpMystery = this.powerUpBtn.querySelector('.powerup-mystery')!;
-    this.powerUpReveal = this.powerUpBtn.querySelector('.powerup-reveal')!;
-    this.powerUpHint = document.querySelector('.powerup-hint')!;
-
-    this.setupGame();
-    this.setupEventListeners();
-    this.setupMusicButton();
-    this.setupPowerUpButton();
+    this.app = document.getElementById('app')!;
+    this.showMenu();
     this.gameLoop();
+  }
 
-    window.addEventListener('resize', () => this.setupGame());
-    window.addEventListener('orientationchange', () => {
-      setTimeout(() => this.setupGame(), 100);
+  // ===== MENU =====
+  private showMenu(): void {
+    this.currentMode = GameMode.MENU;
+    this.cleanup();
+    
+    this.app.innerHTML = `
+      <div class="menu-screen">
+        <div class="menu-content">
+          <h1 class="menu-title">🎮 Match Monsters</h1>
+          <p class="menu-subtitle">Escolha o modo de jogo</p>
+          
+          <div class="menu-buttons">
+            <button class="menu-btn solo-btn" data-mode="solo">
+              <span class="btn-emoji">🎯</span>
+              <span class="btn-title">SOLO</span>
+              <span class="btn-desc">Jogue no seu ritmo</span>
+            </button>
+            
+            <button class="menu-btn vsai-btn" data-mode="vs_ai">
+              <span class="btn-emoji">🤖</span>
+              <span class="btn-title">VS IA</span>
+              <span class="btn-desc">Turnos de ${DEFAULT_CONFIG.turnDuration}s • ${DEFAULT_CONFIG.winScore} pts</span>
+            </button>
+          </div>
+          
+          <p class="menu-footer">Criado por Cláudio 🤖</p>
+        </div>
+      </div>
+    `;
+
+    this.app.querySelectorAll('.menu-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        audio.ensureStarted();
+        audio.playSwap();
+        const mode = (btn as HTMLElement).dataset.mode;
+        if (mode === 'solo') this.startSoloMode();
+        else if (mode === 'vs_ai') this.startVsAIMode();
+      });
     });
   }
 
-  private setupGame(): void {
+  // ===== SOLO MODE =====
+  private startSoloMode(): void {
+    this.currentMode = GameMode.SOLO;
+    this.renderSoloScreen();
+  }
+
+  private renderSoloScreen(): void {
     const maxWidth = Math.min(window.innerWidth - 32, 420);
     const cellSize = Math.floor(maxWidth / this.COLS);
-    
-    this.board = new Board(this.ROWS, this.COLS, cellSize, {
-      onScoreChange: (score) => this.updateScore(score),
+
+    this.app.innerHTML = `
+      <div class="game-screen solo-screen active">
+        <div class="top-bar">
+          <button class="back-btn" id="back-btn">←</button>
+          <div class="score-board">
+            <span class="score-label">PONTOS:</span>
+            <span class="score-value" id="solo-score">0</span>
+          </div>
+          <button class="music-btn" id="music-btn">🔇</button>
+        </div>
+
+        <div class="powerup-section">
+          <div class="energy-bar">
+            <div class="energy-slot" data-index="0"></div>
+            <div class="energy-slot" data-index="1"></div>
+            <div class="energy-slot" data-index="2"></div>
+            <div class="energy-slot" data-index="3"></div>
+          </div>
+          <button class="powerup-btn-big" id="powerup-btn" disabled>
+            <span class="powerup-mystery">❓</span>
+            <span class="powerup-reveal" style="display:none"></span>
+          </button>
+          <span class="powerup-hint" id="powerup-hint">Match 4+</span>
+        </div>
+
+        <div class="game-container">
+          <canvas id="solo-canvas"></canvas>
+        </div>
+
+        <p class="instructions">👆 Arraste para mover | Match 4+ = energia!</p>
+      </div>
+    `;
+
+    this.soloCanvas = document.getElementById('solo-canvas') as HTMLCanvasElement;
+    this.soloCtx = this.soloCanvas.getContext('2d')!;
+
+    this.soloBoard = new Board(this.ROWS, this.COLS, cellSize, {
+      onScoreChange: (s) => this.updateSoloScore(s),
       onSwap: () => audio.playSwap(),
       onMatch: () => audio.playMatch(),
-      onCombo: (level) => audio.playCombo(level),
+      onCombo: (l) => audio.playCombo(l),
       onDrop: () => audio.playDrop(),
       onInvalidMove: () => audio.playInvalid(),
       onNoMoves: () => audio.playNoMoves(),
       onPowerUp: () => audio.playPowerUp(),
       onHint: () => audio.playHint(),
-      onEnergyChange: (energy, _powerUp) => this.updateEnergy(energy),
-      onPowerUpReady: (powerUp) => this.onPowerUpReady(powerUp),
-      onPowerUpUsed: () => this.onPowerUpUsed(),
+      onEnergyChange: (e) => this.updateSoloEnergy(e),
+      onPowerUpReady: (p) => this.onSoloPowerUpReady(p),
+      onPowerUpUsed: () => this.onSoloPowerUpUsed(),
     });
 
-    this.canvas.width = this.board.getWidth();
-    this.canvas.height = this.board.getHeight();
-    this.canvas.style.width = `${this.board.getWidth()}px`;
-    this.canvas.style.height = `${this.board.getHeight()}px`;
+    this.soloCanvas.width = this.soloBoard.getWidth();
+    this.soloCanvas.height = this.soloBoard.getHeight();
 
-    this.updateEnergy(0);
-    this.resetPowerUpButton();
+    this.setupSoloEventListeners();
   }
 
-  private setupMusicButton(): void {
-    this.musicBtn.addEventListener('click', () => {
+  private setupSoloEventListeners(): void {
+    document.getElementById('back-btn')?.addEventListener('click', () => {
+      audio.playSwap();
+      this.showMenu();
+    });
+
+    document.getElementById('music-btn')?.addEventListener('click', (e) => {
       audio.ensureStarted();
+      const btn = e.target as HTMLElement;
       const isPlaying = audio.toggleMusic();
-      this.musicBtn.textContent = isPlaying ? '🔊' : '🔇';
-      this.musicBtn.classList.toggle('active', isPlaying);
+      btn.textContent = isPlaying ? '🔊' : '🔇';
+      btn.classList.toggle('active', isPlaying);
     });
-  }
 
-  private setupPowerUpButton(): void {
-    this.powerUpBtn.addEventListener('click', () => {
-      if (!this.board.hasPowerUp()) return;
-
-      // Se já está ativo (selecionando alvo), cancela
-      if (this.powerUpBtn.classList.contains('active')) {
-        this.board.cancelPowerUpMode();
-        this.powerUpBtn.classList.remove('active');
-        this.powerUpHint.classList.remove('selecting');
-        const powerUp = this.board.getStoredPowerUp();
-        this.powerUpHint.textContent = powerUp ? `${powerUp.name}! Toque!` : 'Toque para usar!';
-        return;
-      }
-
-      // Ativa o power-up
-      if (this.board.activateStoredPowerUp()) {
+    document.getElementById('powerup-btn')?.addEventListener('click', () => {
+      if (!this.soloBoard?.hasPowerUp()) return;
+      const btn = document.getElementById('powerup-btn')!;
+      const hint = document.getElementById('powerup-hint')!;
+      
+      if (btn.classList.contains('active')) {
+        this.soloBoard.cancelPowerUpMode();
+        btn.classList.remove('active');
+        hint.classList.remove('selecting');
+        const p = this.soloBoard.getStoredPowerUp();
+        hint.textContent = p ? `${p.name}!` : 'Match 4+';
+      } else if (this.soloBoard.activateStoredPowerUp()) {
         audio.playSwap();
-        this.powerUpBtn.classList.add('active');
-        
-        const powerUp = this.board.getStoredPowerUp();
-        if (powerUp?.type === 'shuffle') {
-          this.powerUpHint.textContent = 'Embaralhando...';
-        } else {
-          this.powerUpHint.textContent = '👆 Toque no alvo!';
-          this.powerUpHint.classList.add('selecting');
+        btn.classList.add('active');
+        const p = this.soloBoard.getStoredPowerUp();
+        if (p?.type !== 'shuffle') {
+          hint.textContent = '👆 Alvo!';
+          hint.classList.add('selecting');
         }
       }
     });
+
+    this.setupCanvasEvents(this.soloCanvas!, this.soloBoard!);
   }
 
-  private updateEnergy(energy: number): void {
-    this.energySlots.forEach((slot, i) => {
+  private updateSoloScore(score: number): void {
+    const el = document.getElementById('solo-score');
+    if (el) {
+      el.textContent = score.toString();
+      el.style.transform = 'scale(1.2)';
+      setTimeout(() => el.style.transform = 'scale(1)', 150);
+    }
+  }
+
+  private updateSoloEnergy(energy: number): void {
+    document.querySelectorAll('.solo-screen .energy-slot').forEach((slot, i) => {
       slot.classList.toggle('filled', i < energy);
     });
   }
 
-  private onPowerUpReady(powerUp: PowerUpConfig): void {
-    // Revela o power-up com animação
+  private onSoloPowerUpReady(powerUp: PowerUpConfig): void {
     audio.playCombo(2);
-    
-    this.powerUpMystery.style.display = 'none';
-    this.powerUpReveal.style.display = 'block';
-    this.powerUpReveal.textContent = powerUp.emoji;
-    
-    this.powerUpBtn.disabled = false;
-    this.powerUpBtn.classList.add('ready');
-    this.powerUpHint.textContent = `${powerUp.name}! Toque!`;
+    const btn = document.getElementById('powerup-btn');
+    const hint = document.getElementById('powerup-hint');
+    if (btn && hint) {
+      btn.querySelector('.powerup-mystery')!.setAttribute('style', 'display:none');
+      const reveal = btn.querySelector('.powerup-reveal') as HTMLElement;
+      reveal.style.display = 'block';
+      reveal.textContent = powerUp.emoji;
+      btn.removeAttribute('disabled');
+      btn.classList.add('ready');
+      hint.textContent = `${powerUp.name}!`;
+    }
   }
 
-  private onPowerUpUsed(): void {
+  private onSoloPowerUpUsed(): void {
     audio.playPowerUp();
-    this.resetPowerUpButton();
+    const btn = document.getElementById('powerup-btn');
+    const hint = document.getElementById('powerup-hint');
+    if (btn && hint) {
+      btn.setAttribute('disabled', 'true');
+      btn.classList.remove('ready', 'active');
+      btn.querySelector('.powerup-mystery')!.setAttribute('style', 'display:block');
+      btn.querySelector('.powerup-reveal')!.setAttribute('style', 'display:none');
+      hint.textContent = 'Match 4+';
+      hint.classList.remove('selecting');
+    }
   }
 
-  private resetPowerUpButton(): void {
-    this.powerUpBtn.disabled = true;
-    this.powerUpBtn.classList.remove('ready', 'active');
-    this.powerUpMystery.style.display = 'block';
-    this.powerUpReveal.style.display = 'none';
-    this.powerUpHint.textContent = 'Match 4+ para carregar!';
-    this.powerUpHint.classList.remove('selecting');
+  // ===== VS AI MODE =====
+  private startVsAIMode(): void {
+    this.currentMode = GameMode.VS_AI;
+    this.vsaiState = createInitialVsAIState();
+    this.renderVsAIScreen();
+    this.startTurn();
   }
 
-  private setupEventListeners(): void {
-    const initAudio = () => {
-      audio.ensureStarted();
-      document.removeEventListener('touchstart', initAudio);
-      document.removeEventListener('click', initAudio);
-    };
-    document.addEventListener('touchstart', initAudio, { once: true });
-    document.addEventListener('click', initAudio, { once: true });
+  private renderVsAIScreen(): void {
+    const maxWidth = Math.min(window.innerWidth - 32, 380);
+    const humanCellSize = Math.floor(maxWidth / this.COLS);
+    const aiCellSize = Math.floor(humanCellSize * 0.7);
 
-    // Mouse events
-    this.canvas.addEventListener('mousedown', (e) => this.handleTouchStart(e.clientX, e.clientY));
-    this.canvas.addEventListener('mousemove', (e) => {
-      if (this.isDragging) this.handleTouchMove(e.clientX, e.clientY);
+    this.app.innerHTML = `
+      <div class="game-screen vsai-screen active">
+        <div class="vsai-header">
+          <button class="back-btn" id="back-btn">←</button>
+          <div class="player-info ai" id="ai-info">
+            <span class="player-emoji">🤖</span>
+            <span class="player-score" id="ai-score">0</span>
+          </div>
+          <div class="turn-indicator">
+            <span class="turn-timer" id="turn-timer">${DEFAULT_CONFIG.turnDuration}</span>
+            <span class="turn-label" id="turn-label">SUA VEZ</span>
+          </div>
+          <div class="player-info" id="human-info">
+            <span class="player-emoji">👤</span>
+            <span class="player-score" id="human-score">0</span>
+          </div>
+          <button class="music-btn" id="music-btn">🔇</button>
+        </div>
+
+        <div class="ai-board-container" id="ai-container">
+          <p class="ai-board-label">🤖 IA</p>
+          <div class="game-container">
+            <canvas id="ai-canvas"></canvas>
+          </div>
+        </div>
+
+        <div class="game-container" id="human-container">
+          <canvas id="human-canvas"></canvas>
+        </div>
+
+        <p class="instructions">Primeiro a ${DEFAULT_CONFIG.winScore} pontos vence!</p>
+      </div>
+    `;
+
+    // Human board
+    this.humanCanvas = document.getElementById('human-canvas') as HTMLCanvasElement;
+    this.humanCtx = this.humanCanvas.getContext('2d')!;
+    this.humanBoard = new Board(this.ROWS, this.COLS, humanCellSize, {
+      onScoreChange: (s) => this.onHumanScore(s),
+      onSwap: () => audio.playSwap(),
+      onMatch: () => audio.playMatch(),
+      onCombo: (l) => audio.playCombo(l),
+      onDrop: () => audio.playDrop(),
+      onInvalidMove: () => audio.playInvalid(),
+      onNoMoves: () => audio.playNoMoves(),
+      onPowerUp: () => audio.playPowerUp(),
+      onHint: () => {},
+      onEnergyChange: () => {},
+      onPowerUpReady: () => {},
+      onPowerUpUsed: () => {},
     });
-    this.canvas.addEventListener('mouseup', (e) => this.handleTouchEnd(e.clientX, e.clientY));
-    this.canvas.addEventListener('mouseleave', () => this.cancelDrag());
+    this.humanCanvas.width = this.humanBoard.getWidth();
+    this.humanCanvas.height = this.humanBoard.getHeight();
 
-    // Touch events
-    this.canvas.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      const touch = e.touches[0];
-      this.handleTouchStart(touch.clientX, touch.clientY);
-    }, { passive: false });
+    // AI board
+    this.aiCanvas = document.getElementById('ai-canvas') as HTMLCanvasElement;
+    this.aiCtx = this.aiCanvas.getContext('2d')!;
+    this.aiBoard = new Board(this.ROWS, this.COLS, aiCellSize, {
+      onScoreChange: (s) => this.onAIScore(s),
+      onSwap: () => {},
+      onMatch: () => audio.playMatch(),
+      onCombo: (l) => audio.playCombo(l),
+      onDrop: () => {},
+      onInvalidMove: () => {},
+      onNoMoves: () => audio.playNoMoves(),
+      onPowerUp: () => audio.playPowerUp(),
+      onHint: () => {},
+      onEnergyChange: () => {},
+      onPowerUpReady: () => {},
+      onPowerUpUsed: () => {},
+    });
+    this.aiCanvas.width = this.aiBoard.getWidth();
+    this.aiCanvas.height = this.aiBoard.getHeight();
 
-    this.canvas.addEventListener('touchmove', (e) => {
-      e.preventDefault();
-      const touch = e.touches[0];
-      this.handleTouchMove(touch.clientX, touch.clientY);
-    }, { passive: false });
-
-    this.canvas.addEventListener('touchend', (e) => {
-      e.preventDefault();
-      const touch = e.changedTouches[0];
-      this.handleTouchEnd(touch.clientX, touch.clientY);
-    }, { passive: false });
-
-    this.canvas.addEventListener('touchcancel', () => this.cancelDrag());
+    this.setupVsAIEventListeners();
+    this.updateVsAIUI();
   }
 
-  private getCanvasCoords(clientX: number, clientY: number): { x: number; y: number } {
-    const rect = this.canvas.getBoundingClientRect();
-    const scaleX = this.canvas.width / rect.width;
-    const scaleY = this.canvas.height / rect.height;
+  private setupVsAIEventListeners(): void {
+    document.getElementById('back-btn')?.addEventListener('click', () => {
+      audio.playSwap();
+      this.stopTurnTimer();
+      this.showMenu();
+    });
+
+    document.getElementById('music-btn')?.addEventListener('click', (e) => {
+      audio.ensureStarted();
+      const btn = e.target as HTMLElement;
+      const isPlaying = audio.toggleMusic();
+      btn.textContent = isPlaying ? '🔊' : '🔇';
+      btn.classList.toggle('active', isPlaying);
+    });
+
+    this.setupCanvasEvents(this.humanCanvas!, this.humanBoard!);
+  }
+
+  private startTurn(): void {
+    if (!this.vsaiState || this.vsaiState.isGameOver) return;
+
+    this.vsaiState.timeLeft = DEFAULT_CONFIG.turnDuration;
+    this.updateVsAIUI();
+
+    if (this.vsaiState.currentTurn === Player.AI) {
+      document.getElementById('human-container')?.classList.add('disabled');
+      document.getElementById('ai-container')?.classList.add('active');
+      this.startAITurn();
+    } else {
+      document.getElementById('human-container')?.classList.remove('disabled');
+      document.getElementById('ai-container')?.classList.remove('active');
+    }
+
+    this.turnTimer = window.setInterval(() => {
+      if (!this.vsaiState) return;
+      
+      this.vsaiState.timeLeft--;
+      this.updateTimerUI();
+
+      if (this.vsaiState.timeLeft <= 0) {
+        this.endTurn();
+      }
+    }, 1000);
+  }
+
+  private endTurn(): void {
+    this.stopTurnTimer();
+    if (!this.vsaiState || this.vsaiState.isGameOver) return;
+
+    // Switch turns
+    this.vsaiState.currentTurn = 
+      this.vsaiState.currentTurn === Player.HUMAN ? Player.AI : Player.HUMAN;
+    
+    audio.playSwap();
+    this.startTurn();
+  }
+
+  private stopTurnTimer(): void {
+    if (this.turnTimer) {
+      clearInterval(this.turnTimer);
+      this.turnTimer = null;
+    }
+  }
+
+  private async startAITurn(): Promise<void> {
+    if (!this.vsaiState || !this.aiBoard || this.vsaiState.currentTurn !== Player.AI) return;
+    
+    // IA faz jogadas enquanto tiver tempo
+    while (this.vsaiState.timeLeft > 1 && !this.vsaiState.isGameOver && this.vsaiState.currentTurn === Player.AI) {
+      await this.sleep(this.aiPlayer.getThinkingDelay());
+      
+      if (this.vsaiState.currentTurn !== Player.AI) break;
+      
+      const grid = this.aiBoard.getGrid();
+      const move = this.aiPlayer.findBestMove(grid as GemType[][], this.ROWS, this.COLS);
+      
+      if (move) {
+        this.aiBoard.executeMove(move.from, move.to);
+        await this.sleep(this.aiPlayer.getMoveDelay());
+      } else {
+        // Sem jogadas, espera
+        await this.sleep(500);
+      }
+    }
+  }
+
+  private onHumanScore(score: number): void {
+    if (!this.vsaiState) return;
+    this.vsaiState.humanScore = score;
+    this.updateVsAIUI();
+    this.checkWinCondition();
+  }
+
+  private onAIScore(score: number): void {
+    if (!this.vsaiState) return;
+    this.vsaiState.aiScore = score;
+    this.updateVsAIUI();
+    this.checkWinCondition();
+  }
+
+  private checkWinCondition(): void {
+    if (!this.vsaiState || this.vsaiState.isGameOver) return;
+
+    if (this.vsaiState.humanScore >= DEFAULT_CONFIG.winScore) {
+      this.vsaiState.isGameOver = true;
+      this.vsaiState.winner = Player.HUMAN;
+      this.showGameOver();
+    } else if (this.vsaiState.aiScore >= DEFAULT_CONFIG.winScore) {
+      this.vsaiState.isGameOver = true;
+      this.vsaiState.winner = Player.AI;
+      this.showGameOver();
+    }
+  }
+
+  private showGameOver(): void {
+    this.stopTurnTimer();
+    if (!this.vsaiState) return;
+
+    const isWin = this.vsaiState.winner === Player.HUMAN;
+    
+    const overlay = document.createElement('div');
+    overlay.className = 'game-over-overlay';
+    overlay.innerHTML = `
+      <div class="game-over-content">
+        <h2 class="game-over-title ${isWin ? 'win' : 'lose'}">
+          ${isWin ? '🎉 VOCÊ VENCEU!' : '🤖 IA VENCEU!'}
+        </h2>
+        <p class="game-over-score">
+          👤 ${this.vsaiState.humanScore} x ${this.vsaiState.aiScore} 🤖
+        </p>
+        <div class="game-over-buttons">
+          <button class="game-over-btn play-again-btn">Jogar Novamente</button>
+          <button class="game-over-btn menu-return-btn">Menu</button>
+        </div>
+      </div>
+    `;
+
+    overlay.querySelector('.play-again-btn')?.addEventListener('click', () => {
+      audio.playSwap();
+      overlay.remove();
+      this.startVsAIMode();
+    });
+
+    overlay.querySelector('.menu-return-btn')?.addEventListener('click', () => {
+      audio.playSwap();
+      overlay.remove();
+      this.showMenu();
+    });
+
+    document.body.appendChild(overlay);
+    audio.playCombo(3);
+  }
+
+  private updateVsAIUI(): void {
+    if (!this.vsaiState) return;
+
+    const humanScore = document.getElementById('human-score');
+    const aiScore = document.getElementById('ai-score');
+    const humanInfo = document.getElementById('human-info');
+    const aiInfo = document.getElementById('ai-info');
+    const turnLabel = document.getElementById('turn-label');
+
+    if (humanScore) humanScore.textContent = this.vsaiState.humanScore.toString();
+    if (aiScore) aiScore.textContent = this.vsaiState.aiScore.toString();
+    
+    const isHumanTurn = this.vsaiState.currentTurn === Player.HUMAN;
+    humanInfo?.classList.toggle('active', isHumanTurn);
+    aiInfo?.classList.toggle('active', !isHumanTurn);
+    if (turnLabel) turnLabel.textContent = isHumanTurn ? 'SUA VEZ' : 'VEZ DA IA';
+
+    this.updateTimerUI();
+  }
+
+  private updateTimerUI(): void {
+    if (!this.vsaiState) return;
+    
+    const timer = document.getElementById('turn-timer');
+    if (timer) {
+      timer.textContent = this.vsaiState.timeLeft.toString();
+      timer.classList.toggle('warning', this.vsaiState.timeLeft <= 3);
+    }
+  }
+
+  // ===== CANVAS EVENT HANDLING =====
+  private setupCanvasEvents(canvas: HTMLCanvasElement, board: Board): void {
+    canvas.addEventListener('mousedown', (e) => this.handleTouchStart(e.clientX, e.clientY, canvas, board));
+    canvas.addEventListener('mousemove', (e) => {
+      if (this.isDragging) this.handleTouchMove(e.clientX, e.clientY, canvas, board);
+    });
+    canvas.addEventListener('mouseup', (e) => this.handleTouchEnd(e.clientX, e.clientY, canvas, board));
+    canvas.addEventListener('mouseleave', () => this.cancelDrag(board));
+
+    canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      this.handleTouchStart(e.touches[0].clientX, e.touches[0].clientY, canvas, board);
+    }, { passive: false });
+
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      this.handleTouchMove(e.touches[0].clientX, e.touches[0].clientY, canvas, board);
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      this.handleTouchEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY, canvas, board);
+    }, { passive: false });
+
+    canvas.addEventListener('touchcancel', () => this.cancelDrag(board));
+  }
+
+  private getCanvasCoords(clientX: number, clientY: number, canvas: HTMLCanvasElement): { x: number; y: number } {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
     return {
       x: (clientX - rect.left) * scaleX,
       y: (clientY - rect.top) * scaleY
     };
   }
 
-  private handleTouchStart(clientX: number, clientY: number): void {
+  private handleTouchStart(clientX: number, clientY: number, canvas: HTMLCanvasElement, board: Board): void {
+    // Check if it's player's turn in VS AI mode
+    if (this.currentMode === GameMode.VS_AI && this.vsaiState?.currentTurn !== Player.HUMAN) return;
+    
     this.touchStartX = clientX;
     this.touchStartY = clientY;
     this.touchStartTime = Date.now();
     this.isDragging = true;
 
-    const coords = this.getCanvasCoords(clientX, clientY);
-    this.board.setDragStart(coords.x, coords.y);
+    const coords = this.getCanvasCoords(clientX, clientY, canvas);
+    board.setDragStart(coords.x, coords.y);
   }
 
-  private handleTouchMove(clientX: number, clientY: number): void {
+  private handleTouchMove(clientX: number, clientY: number, canvas: HTMLCanvasElement, board: Board): void {
     if (!this.isDragging) return;
-
-    if (this.board.isSelectingTarget()) return;
+    if (board.isSelectingTarget()) return;
 
     const deltaX = clientX - this.touchStartX;
     const deltaY = clientY - this.touchStartY;
@@ -217,20 +567,19 @@ class Game {
 
     if (distance >= this.dragThreshold) {
       let direction: 'left' | 'right' | 'up' | 'down';
-      
       if (Math.abs(deltaX) > Math.abs(deltaY)) {
         direction = deltaX > 0 ? 'right' : 'left';
       } else {
         direction = deltaY > 0 ? 'down' : 'up';
       }
 
-      const coords = this.getCanvasCoords(this.touchStartX, this.touchStartY);
-      this.board.swipeGem(coords.x, coords.y, direction);
-      this.cancelDrag();
+      const coords = this.getCanvasCoords(this.touchStartX, this.touchStartY, canvas);
+      board.swipeGem(coords.x, coords.y, direction);
+      this.cancelDrag(board);
     }
   }
 
-  private handleTouchEnd(clientX: number, clientY: number): void {
+  private handleTouchEnd(clientX: number, clientY: number, canvas: HTMLCanvasElement, board: Board): void {
     if (!this.isDragging) return;
 
     const deltaX = clientX - this.touchStartX;
@@ -239,43 +588,56 @@ class Game {
     const elapsed = Date.now() - this.touchStartTime;
 
     if (distance < this.dragThreshold && elapsed < 300) {
-      const coords = this.getCanvasCoords(clientX, clientY);
-      this.board.handleClick(coords.x, coords.y);
-      
-      // Atualiza UI após usar power-up
-      if (!this.board.hasPowerUp()) {
-        this.resetPowerUpButton();
-      }
-      if (!this.board.isSelectingTarget()) {
-        this.powerUpBtn.classList.remove('active');
-      }
+      const coords = this.getCanvasCoords(clientX, clientY, canvas);
+      board.handleClick(coords.x, coords.y);
     }
 
-    this.cancelDrag();
+    this.cancelDrag(board);
   }
 
-  private cancelDrag(): void {
+  private cancelDrag(board: Board): void {
     this.isDragging = false;
-    this.board.clearDragStart();
+    board.clearDragStart();
   }
 
-  private updateScore(score: number): void {
-    this.scoreElement.textContent = score.toString();
-    this.scoreElement.style.transform = 'scale(1.2)';
-    setTimeout(() => {
-      this.scoreElement.style.transform = 'scale(1)';
-    }, 150);
+  // ===== UTILITIES =====
+  private cleanup(): void {
+    this.stopTurnTimer();
+    this.soloBoard = null;
+    this.humanBoard = null;
+    this.aiBoard = null;
+    this.vsaiState = null;
   }
 
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // ===== GAME LOOP =====
   private gameLoop = (): void => {
     this.render();
     requestAnimationFrame(this.gameLoop);
   };
 
   private render(): void {
-    this.board.update();
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    this.board.render(this.ctx);
+    if (this.currentMode === GameMode.SOLO && this.soloBoard && this.soloCtx && this.soloCanvas) {
+      this.soloBoard.update();
+      this.soloCtx.clearRect(0, 0, this.soloCanvas.width, this.soloCanvas.height);
+      this.soloBoard.render(this.soloCtx);
+    }
+    
+    if (this.currentMode === GameMode.VS_AI) {
+      if (this.humanBoard && this.humanCtx && this.humanCanvas) {
+        this.humanBoard.update();
+        this.humanCtx.clearRect(0, 0, this.humanCanvas.width, this.humanCanvas.height);
+        this.humanBoard.render(this.humanCtx);
+      }
+      if (this.aiBoard && this.aiCtx && this.aiCanvas) {
+        this.aiBoard.update();
+        this.aiCtx.clearRect(0, 0, this.aiCanvas.width, this.aiCanvas.height);
+        this.aiBoard.render(this.aiCtx);
+      }
+    }
   }
 }
 
