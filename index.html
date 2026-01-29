@@ -10,7 +10,6 @@
     <div id="app">
       <header>
         <h1>🎮 Match Monsters</h1>
-        <p class="subtitle">MVP - Mecânica de Combinação</p>
       </header>
 
       <div class="top-bar">
@@ -21,17 +20,46 @@
         <button id="music-btn" class="music-btn" title="Ligar/Desligar música">🔇</button>
       </div>
 
+      <div class="energy-bar">
+        <span class="energy-label">⚡</span>
+        <div class="energy-slots">
+          <div class="energy-slot" data-index="0"></div>
+          <div class="energy-slot" data-index="1"></div>
+          <div class="energy-slot" data-index="2"></div>
+          <div class="energy-slot" data-index="3"></div>
+        </div>
+        <span class="energy-hint">Match 4+ = ⚡</span>
+      </div>
+
+      <div class="powerups-bar">
+        <button class="powerup-btn" data-type="bomb" data-cost="1" disabled title="Bomba - Explode 3x3">
+          <span class="powerup-emoji">💣</span>
+          <span class="powerup-cost">1⚡</span>
+        </button>
+        <button class="powerup-btn" data-type="shuffle" data-cost="1" disabled title="Shuffle - Embaralha">
+          <span class="powerup-emoji">🔀</span>
+          <span class="powerup-cost">1⚡</span>
+        </button>
+        <button class="powerup-btn" data-type="lightning" data-cost="2" disabled title="Raio - Linha + Coluna">
+          <span class="powerup-emoji">⚡</span>
+          <span class="powerup-cost">2⚡</span>
+        </button>
+        <button class="powerup-btn" data-type="rainbow" data-cost="3" disabled title="Arco-íris - Remove cor">
+          <span class="powerup-emoji">🌈</span>
+          <span class="powerup-cost">3⚡</span>
+        </button>
+      </div>
+
       <div class="game-container">
         <canvas id="game"></canvas>
       </div>
 
       <div class="instructions">
-        <p><strong>👆 Arraste</strong> ou <strong>toque</strong> para mover as gemas</p>
-        <p><strong>✨ Combine 3+</strong> iguais para pontuar!</p>
+        <p><strong>👆 Arraste</strong> para mover | <strong>Match 4+</strong> = energia!</p>
       </div>
 
       <footer>
-        <p>Criado por <a href="https://github.com/claudiomil87">Cláudio Milfont</a> 🤖</p>
+        <p>Criado por <a href="https://github.com/claudiomil87">Cláudio</a> 🤖</p>
       </footer>
     </div>
     <script type="module" src="/src/main.ts"></script>

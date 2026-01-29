@@ -1,4 +1,5 @@
 import { Gem, GemType, Position, Match, GEM_COLORS } from './types';
+import { PowerUpType, MAX_ENERGY } from './PowerUps';
 
 export interface BoardCallbacks {
   onScoreChange: (score: number) => void;
@@ -10,6 +11,8 @@ export interface BoardCallbacks {
   onNoMoves: () => void;
   onPowerUp: () => void;
   onHint: () => void;
+  onEnergyChange: (energy: number) => void;
+  onPowerUpUsed: (type: PowerUpType) => void;
 }
 
 export class Board {
@@ -34,6 +37,9 @@ export class Board {
   // Power-up system
   private powerUpMode: boolean = false;
   private noMovesOverlay: boolean = false;
+  private energy: number = 0;
+  private activePowerUp: PowerUpType | null = null;
+  private selectingTarget: boolean = false;
 
   constructor(
     rows: number = 8,
@@ -54,6 +60,8 @@ export class Board {
       onNoMoves: callbacks.onNoMoves || (() => {}),
       onPowerUp: callbacks.onPowerUp || (() => {}),
       onHint: callbacks.onHint || (() => {}),
+      onEnergyChange: callbacks.onEnergyChange || (() => {}),
+      onPowerUpUsed: callbacks.onPowerUpUsed || (() => {}),
     };
     this.grid = [];
     this.initializeBoard();
@@ -205,9 +213,15 @@ export class Board {
 
     if (row < 0 || row >= this.rows || col < 0 || col >= this.cols) return;
 
-    // Power-up mode: explode área
+    // Power-up mode (sem jogadas): explode área
     if (this.powerUpMode) {
-      this.activatePowerUp(row, col);
+      this.activateEmergencyPowerUp(row, col);
+      return;
+    }
+
+    // Modo de seleção de alvo para power-up
+    if (this.selectingTarget && this.activePowerUp) {
+      this.usePowerUp(row, col);
       return;
     }
 
@@ -229,7 +243,7 @@ export class Board {
     }
   }
 
-  private async activatePowerUp(row: number, col: number): Promise<void> {
+  private async activateEmergencyPowerUp(row: number, col: number): Promise<void> {
     this.powerUpMode = false;
     this.noMovesOverlay = false;
     this.isAnimating = true;
@@ -420,6 +434,17 @@ export class Board {
         this.callbacks.onCombo(this.comboLevel);
       }
 
+      // Calcula energia baseado no tamanho dos matches
+      let energyGained = 0;
+      matches.forEach(m => {
+        if (m.gems.length === 4) energyGained += 1;
+        else if (m.gems.length >= 5) energyGained += 2;
+      });
+      
+      if (energyGained > 0) {
+        this.addEnergy(energyGained);
+      }
+
       const points = matches.reduce((sum, m) => sum + m.gems.length * 10, 0) * this.comboLevel;
       this.score += points;
       this.callbacks.onScoreChange(this.score);
@@ -440,6 +465,231 @@ export class Board {
 
     this.comboLevel = 0;
     this.isAnimating = false;
+  }
+
+  // Sistema de energia
+  private addEnergy(amount: number): void {
+    this.energy = Math.min(MAX_ENERGY, this.energy + amount);
+    this.callbacks.onEnergyChange(this.energy);
+  }
+
+  public getEnergy(): number {
+    return this.energy;
+  }
+
+  public canUsePowerUp(type: PowerUpType): boolean {
+    if (this.isAnimating || this.powerUpMode) return false;
+    
+    switch (type) {
+      case PowerUpType.BOMB: return this.energy >= 1;
+      case PowerUpType.SHUFFLE: return this.energy >= 1;
+      case PowerUpType.LIGHTNING: return this.energy >= 2;
+      case PowerUpType.RAINBOW: return this.energy >= 3;
+      default: return false;
+    }
+  }
+
+  public activatePowerUpMode(type: PowerUpType): boolean {
+    if (!this.canUsePowerUp(type)) return false;
+    
+    this.activePowerUp = type;
+    this.selectingTarget = true;
+    return true;
+  }
+
+  public cancelPowerUpMode(): void {
+    this.activePowerUp = null;
+    this.selectingTarget = false;
+  }
+
+  public isSelectingTarget(): boolean {
+    return this.selectingTarget;
+  }
+
+  public getActivePowerUp(): PowerUpType | null {
+    return this.activePowerUp;
+  }
+
+  private async usePowerUp(row: number, col: number): Promise<void> {
+    if (!this.activePowerUp) return;
+    
+    const type = this.activePowerUp;
+    let cost = 0;
+    
+    switch (type) {
+      case PowerUpType.BOMB: cost = 1; break;
+      case PowerUpType.SHUFFLE: cost = 1; break;
+      case PowerUpType.LIGHTNING: cost = 2; break;
+      case PowerUpType.RAINBOW: cost = 3; break;
+    }
+    
+    this.energy -= cost;
+    this.callbacks.onEnergyChange(this.energy);
+    this.callbacks.onPowerUpUsed(type);
+    
+    this.selectingTarget = false;
+    this.activePowerUp = null;
+    this.isAnimating = true;
+
+    switch (type) {
+      case PowerUpType.BOMB:
+        await this.executeBomb(row, col);
+        break;
+      case PowerUpType.LIGHTNING:
+        await this.executeLightning(row, col);
+        break;
+      case PowerUpType.RAINBOW:
+        await this.executeRainbow(row, col);
+        break;
+      case PowerUpType.SHUFFLE:
+        await this.executeShuffle();
+        break;
+    }
+
+    this.isAnimating = false;
+    this.lastMoveTime = Date.now();
+    this.checkForNoMoves();
+  }
+
+  private async executeBomb(row: number, col: number): Promise<void> {
+    // Explode área 3x3
+    for (let r = row - 1; r <= row + 1; r++) {
+      for (let c = col - 1; c <= col + 1; c++) {
+        if (r >= 0 && r < this.rows && c >= 0 && c < this.cols) {
+          if (this.grid[r][c]) {
+            this.grid[r][c]!.isMatched = true;
+          }
+        }
+      }
+    }
+
+    this.score += 50;
+    this.callbacks.onScoreChange(this.score);
+
+    await this.sleep(300);
+    this.removeMatchedGems();
+    await this.sleep(100);
+    this.dropGems();
+    this.callbacks.onDrop();
+    this.fillEmptySpaces();
+    await this.animateFall();
+
+    // Processa matches em cascata
+    const matches = this.findMatches();
+    if (matches.length > 0) {
+      await this.processMatches();
+    }
+  }
+
+  private async executeLightning(row: number, col: number): Promise<void> {
+    // Remove linha inteira + coluna inteira (cruz)
+    for (let c = 0; c < this.cols; c++) {
+      if (this.grid[row][c]) {
+        this.grid[row][c]!.isMatched = true;
+      }
+    }
+    for (let r = 0; r < this.rows; r++) {
+      if (this.grid[r][col]) {
+        this.grid[r][col]!.isMatched = true;
+      }
+    }
+
+    this.score += 100;
+    this.callbacks.onScoreChange(this.score);
+
+    await this.sleep(300);
+    this.removeMatchedGems();
+    await this.sleep(100);
+    this.dropGems();
+    this.callbacks.onDrop();
+    this.fillEmptySpaces();
+    await this.animateFall();
+
+    const matches = this.findMatches();
+    if (matches.length > 0) {
+      await this.processMatches();
+    }
+  }
+
+  private async executeRainbow(row: number, col: number): Promise<void> {
+    // Remove todas as gemas da mesma cor que a selecionada
+    const targetGem = this.grid[row][col];
+    if (!targetGem) return;
+
+    const targetType = targetGem.type;
+    let count = 0;
+
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        if (this.grid[r][c]?.type === targetType) {
+          this.grid[r][c]!.isMatched = true;
+          count++;
+        }
+      }
+    }
+
+    this.score += count * 15;
+    this.callbacks.onScoreChange(this.score);
+
+    await this.sleep(300);
+    this.removeMatchedGems();
+    await this.sleep(100);
+    this.dropGems();
+    this.callbacks.onDrop();
+    this.fillEmptySpaces();
+    await this.animateFall();
+
+    const matches = this.findMatches();
+    if (matches.length > 0) {
+      await this.processMatches();
+    }
+  }
+
+  private async executeShuffle(): Promise<void> {
+    // Coleta todas as gemas
+    const gems: GemType[] = [];
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        if (this.grid[r][c]) {
+          gems.push(this.grid[r][c]!.type);
+        }
+      }
+    }
+
+    // Embaralha
+    for (let i = gems.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [gems[i], gems[j]] = [gems[j], gems[i]];
+    }
+
+    // Redistribui
+    let idx = 0;
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        if (this.grid[r][c] && idx < gems.length) {
+          this.grid[r][c]!.type = gems[idx];
+          this.grid[r][c]!.isNew = true;
+          idx++;
+        }
+      }
+    }
+
+    await this.sleep(300);
+
+    // Marca como não novo
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        if (this.grid[r][c]) {
+          this.grid[r][c]!.isNew = false;
+        }
+      }
+    }
+
+    // Processa matches que podem ter surgido
+    const matches = this.findMatches();
+    if (matches.length > 0) {
+      await this.processMatches();
+    }
   }
 
   private removeMatchedGems(): void {
@@ -667,6 +917,36 @@ export class Board {
       ctx.shadowBlur = 0;
       ctx.fillText('Toque em uma gema para explodir!', this.getWidth() / 2, this.getHeight() / 2 + this.cellSize * 0.5);
     }
+
+    // Overlay de seleção de alvo para power-up
+    if (this.selectingTarget && this.activePowerUp) {
+      // Escurece levemente
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      ctx.fillRect(0, 0, this.getWidth(), this.getHeight());
+
+      // Borda pulsante indicando modo de seleção
+      const pulse = (Math.sin(Date.now() / 200) + 1) / 2;
+      ctx.strokeStyle = `rgba(255, 215, 0, ${0.5 + pulse * 0.5})`;
+      ctx.lineWidth = 4;
+      ctx.shadowColor = '#ffd700';
+      ctx.shadowBlur = 15;
+      ctx.strokeRect(2, 2, this.getWidth() - 4, this.getHeight() - 4);
+      ctx.shadowBlur = 0;
+
+      // Texto
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.font = `bold ${this.cellSize * 0.3}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      
+      let text = 'Selecione o alvo';
+      if (this.activePowerUp === PowerUpType.SHUFFLE) {
+        text = 'Embaralhando...';
+        // Auto-executa shuffle (não precisa de alvo)
+        this.usePowerUp(0, 0);
+      }
+      ctx.fillText(text, this.getWidth() / 2, 10);
+    }
   }
 
   private renderGem(ctx: CanvasRenderingContext2D, gem: Gem): void {
@@ -843,12 +1123,22 @@ export class Board {
   public swipeGem(x: number, y: number, direction: 'left' | 'right' | 'up' | 'down'): void {
     if (this.isAnimating) return;
 
-    // Se em power-up mode, qualquer toque ativa
+    // Se em power-up mode (sem jogadas), qualquer toque ativa
     if (this.powerUpMode) {
       const col = Math.floor(x / this.cellSize);
       const row = Math.floor(y / this.cellSize);
       if (row >= 0 && row < this.rows && col >= 0 && col < this.cols) {
-        this.activatePowerUp(row, col);
+        this.activateEmergencyPowerUp(row, col);
+      }
+      return;
+    }
+
+    // Se selecionando alvo para power-up
+    if (this.selectingTarget && this.activePowerUp) {
+      const col = Math.floor(x / this.cellSize);
+      const row = Math.floor(y / this.cellSize);
+      if (row >= 0 && row < this.rows && col >= 0 && col < this.cols) {
+        this.usePowerUp(row, col);
       }
       return;
     }

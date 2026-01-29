@@ -104,6 +104,116 @@ h1 {
   box-shadow: 0 0 15px rgba(102, 187, 106, 0.3);
 }
 
+/* Energy Bar */
+.energy-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 6px 12px;
+  border-radius: 25px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.energy-label {
+  font-size: 1.2rem;
+}
+
+.energy-slots {
+  display: flex;
+  gap: 4px;
+}
+
+.energy-slot {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+}
+
+.energy-slot.filled {
+  background: linear-gradient(135deg, #ffd700 0%, #ffaa00 100%);
+  border-color: #ffd700;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+  animation: energyPulse 1s ease-in-out infinite;
+}
+
+@keyframes energyPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+.energy-hint {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Power-ups Bar */
+.powerups-bar {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.powerup-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 50px;
+  height: 55px;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  opacity: 0.4;
+}
+
+.powerup-btn:disabled {
+  cursor: not-allowed;
+}
+
+.powerup-btn.available {
+  opacity: 1;
+  border-color: rgba(255, 215, 0, 0.5);
+  background: rgba(255, 215, 0, 0.1);
+  animation: powerupGlow 1.5s ease-in-out infinite;
+}
+
+.powerup-btn.available:hover {
+  transform: scale(1.1);
+  background: rgba(255, 215, 0, 0.2);
+}
+
+.powerup-btn.available:active {
+  transform: scale(0.95);
+}
+
+.powerup-btn.active {
+  border-color: #00ff00;
+  background: rgba(0, 255, 0, 0.2);
+  box-shadow: 0 0 20px rgba(0, 255, 0, 0.4);
+}
+
+@keyframes powerupGlow {
+  0%, 100% { box-shadow: 0 0 5px rgba(255, 215, 0, 0.3); }
+  50% { box-shadow: 0 0 15px rgba(255, 215, 0, 0.5); }
+}
+
+.powerup-emoji {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.powerup-cost {
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 2px;
+}
+
 .score-label {
   font-size: 0.8rem;
   font-weight: 600;
