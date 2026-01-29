@@ -409,6 +409,34 @@ body {
   letter-spacing: 1px;
 }
 
+.moves-left {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #ffca28;
+  text-shadow: 0 0 10px rgba(255, 202, 40, 0.5);
+}
+
+.turn-indicator.turns-mode {
+  gap: 2px;
+}
+
+.board-label {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+  margin: 4px 0;
+}
+
+.turns-btn:hover {
+  border-color: rgba(255, 202, 40, 0.5);
+  background: rgba(255, 202, 40, 0.1);
+}
+
+.time-btn:hover {
+  border-color: rgba(66, 165, 245, 0.5);
+  background: rgba(66, 165, 245, 0.1);
+}
+
 .ai-board-container {
   transform: scale(0.75);
   transform-origin: center;

@@ -14,6 +14,8 @@ export interface BoardCallbacks {
   onEnergyChange: (energy: number, powerUp: PowerUpConfig | null) => void;
   onPowerUpReady: (powerUp: PowerUpConfig) => void;
   onPowerUpUsed: () => void;
+  onMatch4Plus: (count: number) => void; // Notifica matches de 4+
+  onMoveComplete: (hadMatch: boolean) => void; // Notifica quando uma jogada termina
 }
 
 export class Board {
@@ -42,6 +44,9 @@ export class Board {
   private storedPowerUp: PowerUpConfig | null = null;
   private activePowerUp: PowerUpType | null = null;
   private selectingTarget: boolean = false;
+  
+  // Modo de jogo
+  private allowNoMatchMoves: boolean = false; // Permite jogadas sem match
 
   constructor(
     rows: number = 8,
@@ -65,6 +70,8 @@ export class Board {
       onEnergyChange: callbacks.onEnergyChange || (() => {}),
       onPowerUpReady: callbacks.onPowerUpReady || (() => {}),
       onPowerUpUsed: callbacks.onPowerUpUsed || (() => {}),
+      onMatch4Plus: callbacks.onMatch4Plus || (() => {}),
+      onMoveComplete: callbacks.onMoveComplete || (() => {}),
     };
     this.grid = [];
     this.initializeBoard();
@@ -318,26 +325,35 @@ export class Board {
 
     const matches = this.findMatches();
     if (matches.length === 0) {
-      this.callbacks.onInvalidMove();
-      
-      this.grid[pos1.row][pos1.col] = gem1;
-      this.grid[pos2.row][pos2.col] = gem2;
+      if (this.allowNoMatchMoves) {
+        // Modo turnos: permite jogada sem match, mas notifica
+        this.callbacks.onMoveComplete(false);
+      } else {
+        // Modo normal: desfaz a jogada
+        this.callbacks.onInvalidMove();
+        
+        this.grid[pos1.row][pos1.col] = gem1;
+        this.grid[pos2.row][pos2.col] = gem2;
 
-      gem1.row = pos1.row;
-      gem1.col = pos1.col;
-      gem1.x = pos1.col * this.cellSize;
-      gem1.y = pos1.row * this.cellSize;
-      gem1.targetY = pos1.row * this.cellSize;
+        gem1.row = pos1.row;
+        gem1.col = pos1.col;
+        gem1.x = pos1.col * this.cellSize;
+        gem1.y = pos1.row * this.cellSize;
+        gem1.targetY = pos1.row * this.cellSize;
 
-      gem2.row = pos2.row;
-      gem2.col = pos2.col;
-      gem2.x = pos2.col * this.cellSize;
-      gem2.y = pos2.row * this.cellSize;
-      gem2.targetY = pos2.row * this.cellSize;
+        gem2.row = pos2.row;
+        gem2.col = pos2.col;
+        gem2.x = pos2.col * this.cellSize;
+        gem2.y = pos2.row * this.cellSize;
+        gem2.targetY = pos2.row * this.cellSize;
+      }
     } else {
       await this.processMatches();
       
-      // Após processar, verifica se ainda há jogadas
+      // Notifica que a jogada terminou (com match)
+      this.callbacks.onMoveComplete(true);
+      
+      // Verifica se ainda há jogadas
       this.checkForNoMoves();
     }
   }
@@ -439,13 +455,24 @@ export class Board {
 
       // Calcula energia baseado no tamanho dos matches
       let energyGained = 0;
+      let match4PlusCount = 0;
       matches.forEach(m => {
-        if (m.gems.length === 4) energyGained += 1;
-        else if (m.gems.length >= 5) energyGained += 2;
+        if (m.gems.length === 4) {
+          energyGained += 1;
+          match4PlusCount++;
+        } else if (m.gems.length >= 5) {
+          energyGained += 2;
+          match4PlusCount++;
+        }
       });
       
       if (energyGained > 0) {
         this.addEnergy(energyGained);
+      }
+      
+      // Notifica matches de 4+
+      if (match4PlusCount > 0) {
+        this.callbacks.onMatch4Plus(match4PlusCount);
       }
 
       const points = matches.reduce((sum, m) => sum + m.gems.length * 10, 0) * this.comboLevel;
@@ -1165,6 +1192,11 @@ export class Board {
 
   public isPowerUpMode(): boolean {
     return this.powerUpMode;
+  }
+
+  // Modo de jogo
+  public setAllowNoMatchMoves(allow: boolean): void {
+    this.allowNoMatchMoves = allow;
   }
 
   // Para a IA acessar o grid
