@@ -20,34 +20,18 @@
         <button id="music-btn" class="music-btn" title="Ligar/Desligar música">🔇</button>
       </div>
 
-      <div class="energy-bar">
-        <span class="energy-label">⚡</span>
-        <div class="energy-slots">
+      <div class="powerup-section">
+        <div class="energy-bar">
           <div class="energy-slot" data-index="0"></div>
           <div class="energy-slot" data-index="1"></div>
           <div class="energy-slot" data-index="2"></div>
           <div class="energy-slot" data-index="3"></div>
         </div>
-        <span class="energy-hint">Match 4+ = ⚡</span>
-      </div>
-
-      <div class="powerups-bar">
-        <button class="powerup-btn" data-type="bomb" data-cost="1" disabled title="Bomba - Explode 3x3">
-          <span class="powerup-emoji">💣</span>
-          <span class="powerup-cost">1⚡</span>
+        <button id="powerup-btn" class="powerup-btn-big" disabled>
+          <span class="powerup-mystery">❓</span>
+          <span class="powerup-reveal" style="display:none"></span>
         </button>
-        <button class="powerup-btn" data-type="shuffle" data-cost="1" disabled title="Shuffle - Embaralha">
-          <span class="powerup-emoji">🔀</span>
-          <span class="powerup-cost">1⚡</span>
-        </button>
-        <button class="powerup-btn" data-type="lightning" data-cost="2" disabled title="Raio - Linha + Coluna">
-          <span class="powerup-emoji">⚡</span>
-          <span class="powerup-cost">2⚡</span>
-        </button>
-        <button class="powerup-btn" data-type="rainbow" data-cost="3" disabled title="Arco-íris - Remove cor">
-          <span class="powerup-emoji">🌈</span>
-          <span class="powerup-cost">3⚡</span>
-        </button>
+        <span class="powerup-hint">Match 4+ para carregar!</span>
       </div>
 
       <div class="game-container">

@@ -1,5 +1,5 @@
 import { Gem, GemType, Position, Match, GEM_COLORS } from './types';
-import { PowerUpType, MAX_ENERGY } from './PowerUps';
+import { PowerUpType, ENERGY_NEEDED, getRandomPowerUp, PowerUpConfig } from './PowerUps';
 
 export interface BoardCallbacks {
   onScoreChange: (score: number) => void;
@@ -11,8 +11,9 @@ export interface BoardCallbacks {
   onNoMoves: () => void;
   onPowerUp: () => void;
   onHint: () => void;
-  onEnergyChange: (energy: number) => void;
-  onPowerUpUsed: (type: PowerUpType) => void;
+  onEnergyChange: (energy: number, powerUp: PowerUpConfig | null) => void;
+  onPowerUpReady: (powerUp: PowerUpConfig) => void;
+  onPowerUpUsed: () => void;
 }
 
 export class Board {
@@ -38,6 +39,7 @@ export class Board {
   private powerUpMode: boolean = false;
   private noMovesOverlay: boolean = false;
   private energy: number = 0;
+  private storedPowerUp: PowerUpConfig | null = null;
   private activePowerUp: PowerUpType | null = null;
   private selectingTarget: boolean = false;
 
@@ -61,6 +63,7 @@ export class Board {
       onPowerUp: callbacks.onPowerUp || (() => {}),
       onHint: callbacks.onHint || (() => {}),
       onEnergyChange: callbacks.onEnergyChange || (() => {}),
+      onPowerUpReady: callbacks.onPowerUpReady || (() => {}),
       onPowerUpUsed: callbacks.onPowerUpUsed || (() => {}),
     };
     this.grid = [];
@@ -467,32 +470,37 @@ export class Board {
     this.isAnimating = false;
   }
 
-  // Sistema de energia
+  // Sistema de energia - junta 4 = ganha power-up aleatório
   private addEnergy(amount: number): void {
-    this.energy = Math.min(MAX_ENERGY, this.energy + amount);
-    this.callbacks.onEnergyChange(this.energy);
+    // Se já tem power-up guardado, não ganha mais energia
+    if (this.storedPowerUp) return;
+    
+    this.energy = Math.min(ENERGY_NEEDED, this.energy + amount);
+    this.callbacks.onEnergyChange(this.energy, this.storedPowerUp);
+    
+    // Completou! Ganha power-up aleatório
+    if (this.energy >= ENERGY_NEEDED) {
+      this.storedPowerUp = getRandomPowerUp();
+      this.callbacks.onPowerUpReady(this.storedPowerUp);
+    }
   }
 
   public getEnergy(): number {
     return this.energy;
   }
 
-  public canUsePowerUp(type: PowerUpType): boolean {
-    if (this.isAnimating || this.powerUpMode) return false;
-    
-    switch (type) {
-      case PowerUpType.BOMB: return this.energy >= 1;
-      case PowerUpType.SHUFFLE: return this.energy >= 1;
-      case PowerUpType.LIGHTNING: return this.energy >= 2;
-      case PowerUpType.RAINBOW: return this.energy >= 3;
-      default: return false;
-    }
+  public getStoredPowerUp(): PowerUpConfig | null {
+    return this.storedPowerUp;
   }
 
-  public activatePowerUpMode(type: PowerUpType): boolean {
-    if (!this.canUsePowerUp(type)) return false;
+  public hasPowerUp(): boolean {
+    return this.storedPowerUp !== null;
+  }
+
+  public activateStoredPowerUp(): boolean {
+    if (!this.storedPowerUp || this.isAnimating || this.powerUpMode) return false;
     
-    this.activePowerUp = type;
+    this.activePowerUp = this.storedPowerUp.type;
     this.selectingTarget = true;
     return true;
   }
@@ -511,21 +519,15 @@ export class Board {
   }
 
   private async usePowerUp(row: number, col: number): Promise<void> {
-    if (!this.activePowerUp) return;
+    if (!this.activePowerUp || !this.storedPowerUp) return;
     
     const type = this.activePowerUp;
-    let cost = 0;
     
-    switch (type) {
-      case PowerUpType.BOMB: cost = 1; break;
-      case PowerUpType.SHUFFLE: cost = 1; break;
-      case PowerUpType.LIGHTNING: cost = 2; break;
-      case PowerUpType.RAINBOW: cost = 3; break;
-    }
-    
-    this.energy -= cost;
-    this.callbacks.onEnergyChange(this.energy);
-    this.callbacks.onPowerUpUsed(type);
+    // Gasta o power-up
+    this.storedPowerUp = null;
+    this.energy = 0;
+    this.callbacks.onEnergyChange(this.energy, null);
+    this.callbacks.onPowerUpUsed();
     
     this.selectingTarget = false;
     this.activePowerUp = null;

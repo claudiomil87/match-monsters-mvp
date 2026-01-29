@@ -1,7 +1,7 @@
 import './style.css';
 import { Board } from './Board';
 import { audio } from './Audio';
-import { PowerUpType } from './PowerUps';
+import { PowerUpConfig } from './PowerUps';
 
 class Game {
   private canvas: HTMLCanvasElement;
@@ -10,7 +10,10 @@ class Game {
   private scoreElement: HTMLElement;
   private musicBtn: HTMLElement;
   private energySlots: NodeListOf<HTMLElement>;
-  private powerUpBtns: NodeListOf<HTMLButtonElement>;
+  private powerUpBtn: HTMLButtonElement;
+  private powerUpMystery: HTMLElement;
+  private powerUpReveal: HTMLElement;
+  private powerUpHint: HTMLElement;
 
   private readonly COLS = 7;
   private readonly ROWS = 5;
@@ -27,12 +30,15 @@ class Game {
     this.scoreElement = document.getElementById('score')!;
     this.musicBtn = document.getElementById('music-btn')!;
     this.energySlots = document.querySelectorAll('.energy-slot');
-    this.powerUpBtns = document.querySelectorAll('.powerup-btn');
+    this.powerUpBtn = document.getElementById('powerup-btn') as HTMLButtonElement;
+    this.powerUpMystery = this.powerUpBtn.querySelector('.powerup-mystery')!;
+    this.powerUpReveal = this.powerUpBtn.querySelector('.powerup-reveal')!;
+    this.powerUpHint = document.querySelector('.powerup-hint')!;
 
     this.setupGame();
     this.setupEventListeners();
     this.setupMusicButton();
-    this.setupPowerUpButtons();
+    this.setupPowerUpButton();
     this.gameLoop();
 
     window.addEventListener('resize', () => this.setupGame());
@@ -55,8 +61,9 @@ class Game {
       onNoMoves: () => audio.playNoMoves(),
       onPowerUp: () => audio.playPowerUp(),
       onHint: () => audio.playHint(),
-      onEnergyChange: (energy) => this.updateEnergy(energy),
-      onPowerUpUsed: (type) => this.onPowerUpUsed(type),
+      onEnergyChange: (energy, _powerUp) => this.updateEnergy(energy),
+      onPowerUpReady: (powerUp) => this.onPowerUpReady(powerUp),
+      onPowerUpUsed: () => this.onPowerUpUsed(),
     });
 
     this.canvas.width = this.board.getWidth();
@@ -64,8 +71,8 @@ class Game {
     this.canvas.style.width = `${this.board.getWidth()}px`;
     this.canvas.style.height = `${this.board.getHeight()}px`;
 
-    // Reset UI
     this.updateEnergy(0);
+    this.resetPowerUpButton();
   }
 
   private setupMusicButton(): void {
@@ -77,67 +84,63 @@ class Game {
     });
   }
 
-  private setupPowerUpButtons(): void {
-    this.powerUpBtns.forEach(btn => {
-      btn.addEventListener('click', () => {
-        const typeStr = btn.dataset.type;
-        if (!typeStr) return;
+  private setupPowerUpButton(): void {
+    this.powerUpBtn.addEventListener('click', () => {
+      if (!this.board.hasPowerUp()) return;
 
-        const type = this.getPowerUpType(typeStr);
-        if (!type) return;
+      // Se já está ativo (selecionando alvo), cancela
+      if (this.powerUpBtn.classList.contains('active')) {
+        this.board.cancelPowerUpMode();
+        this.powerUpBtn.classList.remove('active');
+        this.powerUpHint.textContent = 'Toque para usar!';
+        return;
+      }
 
-        // Se já está ativo, cancela
-        if (btn.classList.contains('active')) {
-          this.board.cancelPowerUpMode();
-          this.updatePowerUpButtons();
-          return;
+      // Ativa o power-up
+      if (this.board.activateStoredPowerUp()) {
+        audio.playSwap();
+        this.powerUpBtn.classList.add('active');
+        
+        const powerUp = this.board.getStoredPowerUp();
+        if (powerUp?.type === 'shuffle') {
+          this.powerUpHint.textContent = 'Embaralhando...';
+        } else {
+          this.powerUpHint.textContent = 'Selecione o alvo!';
         }
-
-        // Tenta ativar
-        if (this.board.activatePowerUpMode(type)) {
-          audio.playSwap();
-          this.updatePowerUpButtons();
-        }
-      });
+      }
     });
-  }
-
-  private getPowerUpType(str: string): PowerUpType | null {
-    switch (str) {
-      case 'bomb': return PowerUpType.BOMB;
-      case 'shuffle': return PowerUpType.SHUFFLE;
-      case 'lightning': return PowerUpType.LIGHTNING;
-      case 'rainbow': return PowerUpType.RAINBOW;
-      default: return null;
-    }
   }
 
   private updateEnergy(energy: number): void {
     this.energySlots.forEach((slot, i) => {
       slot.classList.toggle('filled', i < energy);
     });
-    this.updatePowerUpButtons();
   }
 
-  private updatePowerUpButtons(): void {
-    const energy = this.board.getEnergy();
-    const activePowerUp = this.board.getActivePowerUp();
-
-    this.powerUpBtns.forEach(btn => {
-      const cost = parseInt(btn.dataset.cost || '0');
-      const typeStr = btn.dataset.type;
-      const type = typeStr ? this.getPowerUpType(typeStr) : null;
-      
-      const canUse = energy >= cost && !this.board.isSelectingTarget();
-      btn.disabled = !canUse;
-      btn.classList.toggle('available', canUse);
-      btn.classList.toggle('active', activePowerUp === type);
-    });
+  private onPowerUpReady(powerUp: PowerUpConfig): void {
+    // Revela o power-up com animação
+    audio.playCombo(2);
+    
+    this.powerUpMystery.style.display = 'none';
+    this.powerUpReveal.style.display = 'block';
+    this.powerUpReveal.textContent = powerUp.emoji;
+    
+    this.powerUpBtn.disabled = false;
+    this.powerUpBtn.classList.add('ready');
+    this.powerUpHint.textContent = `${powerUp.name}! Toque!`;
   }
 
-  private onPowerUpUsed(_type: PowerUpType): void {
+  private onPowerUpUsed(): void {
     audio.playPowerUp();
-    this.updatePowerUpButtons();
+    this.resetPowerUpButton();
+  }
+
+  private resetPowerUpButton(): void {
+    this.powerUpBtn.disabled = true;
+    this.powerUpBtn.classList.remove('ready', 'active');
+    this.powerUpMystery.style.display = 'block';
+    this.powerUpReveal.style.display = 'none';
+    this.powerUpHint.textContent = 'Match 4+ para carregar!';
   }
 
   private setupEventListeners(): void {
@@ -202,7 +205,6 @@ class Game {
   private handleTouchMove(clientX: number, clientY: number): void {
     if (!this.isDragging) return;
 
-    // Se selecionando alvo de power-up, não faz swipe
     if (this.board.isSelectingTarget()) return;
 
     const deltaX = clientX - this.touchStartX;
@@ -235,7 +237,14 @@ class Game {
     if (distance < this.dragThreshold && elapsed < 300) {
       const coords = this.getCanvasCoords(clientX, clientY);
       this.board.handleClick(coords.x, coords.y);
-      this.updatePowerUpButtons();
+      
+      // Atualiza UI após usar power-up
+      if (!this.board.hasPowerUp()) {
+        this.resetPowerUpButton();
+      }
+      if (!this.board.isSelectingTarget()) {
+        this.powerUpBtn.classList.remove('active');
+      }
     }
 
     this.cancelDrag();
