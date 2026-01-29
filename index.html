@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Match Monsters MVP 🎮</title>
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>🎮 Match Monsters</h1>
+        <p class="subtitle">MVP - Mecânica de Combinação</p>
+      </header>
+
+      <div class="score-board">
+        <span class="score-label">PONTOS:</span>
+        <span id="score">0</span>
+      </div>
+
+      <div class="game-container">
+        <canvas id="game"></canvas>
+      </div>
+
+      <div class="instructions">
+        <p>🎯 Clique em uma gema e depois em uma adjacente para trocar</p>
+        <p>✨ Combine 3 ou mais gemas iguais para pontuar!</p>
+        <div class="gem-legend">
+          <span>🔥 Fogo</span>
+          <span>💧 Água</span>
+          <span>🌿 Planta</span>
+          <span>⚡ Elétrico</span>
+          <span>🔮 Psíquico</span>
+          <span>🍒 Dark</span>
+        </div>
+      </div>
+
+      <footer>
+        <p>Criado por <a href="https://github.com/claudiomil87">Cláudio Milfont</a> 🤖</p>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

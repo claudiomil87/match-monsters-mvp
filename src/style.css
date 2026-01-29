@@ -1,0 +1,140 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: 20px;
+}
+
+header {
+  text-align: center;
+}
+
+h1 {
+  font-size: 2.5rem;
+  background: linear-gradient(90deg, #ff4444, #ffdd44, #44dd44, #44aaff, #aa44ff);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 30px rgba(255, 255, 255, 0.2);
+  margin-bottom: 10px;
+}
+
+.subtitle {
+  color: #888;
+  font-size: 1rem;
+}
+
+.score-board {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 15px 30px;
+  border-radius: 50px;
+  backdrop-filter: blur(10px);
+}
+
+.score-label {
+  font-size: 1.2rem;
+  color: #aaa;
+}
+
+#score {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #ffdd44;
+  text-shadow: 0 0 20px rgba(255, 221, 68, 0.5);
+}
+
+.game-container {
+  position: relative;
+  border-radius: 15px;
+  overflow: hidden;
+  box-shadow: 
+    0 0 0 3px rgba(255, 255, 255, 0.1),
+    0 10px 40px rgba(0, 0, 0, 0.5),
+    0 0 100px rgba(100, 100, 255, 0.2);
+}
+
+#game {
+  display: block;
+  cursor: pointer;
+}
+
+.instructions {
+  text-align: center;
+  color: #666;
+  font-size: 0.9rem;
+  max-width: 400px;
+}
+
+.instructions p {
+  margin: 5px 0;
+}
+
+.gem-legend {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.gem-legend span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 5px 10px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+}
+
+footer {
+  margin-top: 20px;
+  color: #444;
+  font-size: 0.8rem;
+}
+
+footer a {
+  color: #666;
+  text-decoration: none;
+}
+
+footer a:hover {
+  color: #888;
+}
+
+/* Responsivo */
+@media (max-width: 600px) {
+  h1 {
+    font-size: 1.8rem;
+  }
+
+  #game {
+    max-width: 90vw;
+    height: auto;
+  }
+
+  .score-board {
+    padding: 10px 20px;
+  }
+}
