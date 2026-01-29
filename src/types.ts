@@ -1,11 +1,11 @@
 // Tipos de gemas baseados nos elementos do Match Monsters
 export enum GemType {
-  FIRE = 'fire',      // Vermelho
-  WATER = 'water',    // Azul
-  GRASS = 'grass',    // Verde
-  ELECTRIC = 'electric', // Amarelo
-  PSYCHIC = 'psychic',   // Roxo
-  DARK = 'dark',      // Rosa/Cereja
+  FIRE = 'fire',
+  WATER = 'water',
+  GRASS = 'grass',
+  ELECTRIC = 'electric',
+  PSYCHIC = 'psychic',
+  DARK = 'dark',
 }
 
 export interface Position {
@@ -30,19 +30,10 @@ export interface Match {
 }
 
 export const GEM_COLORS: Record<GemType, string> = {
-  [GemType.FIRE]: '#ff4444',
-  [GemType.WATER]: '#44aaff',
-  [GemType.GRASS]: '#44dd44',
-  [GemType.ELECTRIC]: '#ffdd44',
-  [GemType.PSYCHIC]: '#aa44ff',
-  [GemType.DARK]: '#ff44aa',
-};
-
-export const GEM_ICONS: Record<GemType, string> = {
-  [GemType.FIRE]: '🔥',
-  [GemType.WATER]: '💧',
-  [GemType.GRASS]: '🌿',
-  [GemType.ELECTRIC]: '⚡',
-  [GemType.PSYCHIC]: '🔮',
-  [GemType.DARK]: '🍒',
+  [GemType.FIRE]: '#ff5252',
+  [GemType.WATER]: '#42a5f5',
+  [GemType.GRASS]: '#66bb6a',
+  [GemType.ELECTRIC]: '#ffca28',
+  [GemType.PSYCHIC]: '#ab47bc',
+  [GemType.DARK]: '#ec407a',
 };

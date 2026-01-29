@@ -2,25 +2,30 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   color: #fff;
+  overflow: hidden;
 }
 
 #app {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20px;
-  padding: 20px;
+  gap: 16px;
+  padding: 16px;
+  width: 100%;
+  max-width: 500px;
 }
 
 header {
@@ -28,113 +33,136 @@ header {
 }
 
 h1 {
-  font-size: 2.5rem;
-  background: linear-gradient(90deg, #ff4444, #ffdd44, #44dd44, #44aaff, #aa44ff);
+  font-size: 2rem;
+  font-weight: 800;
+  background: linear-gradient(90deg, #ff5252, #ffca28, #66bb6a, #42a5f5, #ab47bc, #ec407a);
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  text-shadow: 0 0 30px rgba(255, 255, 255, 0.2);
-  margin-bottom: 10px;
+  text-shadow: 0 0 40px rgba(255, 255, 255, 0.15);
+  margin-bottom: 4px;
 }
 
 .subtitle {
-  color: #888;
-  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.85rem;
+  font-weight: 500;
 }
 
 .score-board {
   display: flex;
   align-items: center;
-  gap: 15px;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 15px 30px;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 12px 24px;
   border-radius: 50px;
   backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .score-label {
-  font-size: 1.2rem;
-  color: #aaa;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: 1px;
 }
 
 #score {
-  font-size: 2rem;
-  font-weight: bold;
-  color: #ffdd44;
-  text-shadow: 0 0 20px rgba(255, 221, 68, 0.5);
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #ffca28;
+  text-shadow: 0 0 20px rgba(255, 202, 40, 0.5);
+  min-width: 80px;
+  text-align: center;
 }
 
 .game-container {
   position: relative;
-  border-radius: 15px;
+  border-radius: 16px;
   overflow: hidden;
   box-shadow: 
-    0 0 0 3px rgba(255, 255, 255, 0.1),
-    0 10px 40px rgba(0, 0, 0, 0.5),
-    0 0 100px rgba(100, 100, 255, 0.2);
+    0 0 0 2px rgba(255, 255, 255, 0.1),
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 0 80px rgba(100, 100, 255, 0.15),
+    inset 0 0 60px rgba(0, 0, 0, 0.3);
 }
 
 #game {
   display: block;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .instructions {
   text-align: center;
-  color: #666;
-  font-size: 0.9rem;
-  max-width: 400px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.85rem;
+  max-width: 320px;
+  line-height: 1.5;
 }
 
 .instructions p {
-  margin: 5px 0;
+  margin: 6px 0;
 }
 
-.gem-legend {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  flex-wrap: wrap;
-  margin-top: 10px;
-}
-
-.gem-legend span {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 5px 10px;
-  border-radius: 20px;
-  font-size: 0.8rem;
+.instructions strong {
+  color: rgba(255, 255, 255, 0.85);
 }
 
 footer {
-  margin-top: 20px;
-  color: #444;
-  font-size: 0.8rem;
+  margin-top: 12px;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 0.75rem;
 }
 
 footer a {
-  color: #666;
+  color: rgba(255, 255, 255, 0.5);
   text-decoration: none;
+  transition: color 0.2s;
 }
 
 footer a:hover {
-  color: #888;
+  color: rgba(255, 255, 255, 0.8);
 }
 
-/* Responsivo */
-@media (max-width: 600px) {
-  h1 {
-    font-size: 1.8rem;
+/* Mobile adjustments */
+@media (max-width: 480px) {
+  #app {
+    gap: 12px;
+    padding: 12px;
   }
 
-  #game {
-    max-width: 90vw;
-    height: auto;
+  h1 {
+    font-size: 1.6rem;
   }
 
   .score-board {
     padding: 10px 20px;
+  }
+
+  #score {
+    font-size: 1.5rem;
+  }
+
+  .instructions {
+    font-size: 0.8rem;
+  }
+}
+
+/* Landscape mobile */
+@media (max-height: 600px) and (orientation: landscape) {
+  #app {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  header {
+    width: 100%;
+  }
+
+  .instructions {
+    display: none;
   }
 }

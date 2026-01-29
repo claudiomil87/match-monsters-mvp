@@ -1,4 +1,4 @@
-import { Gem, GemType, Position, Match, GEM_COLORS, GEM_ICONS } from './types';
+import { Gem, GemType, Position, Match, GEM_COLORS } from './types';
 
 export class Board {
   private grid: (Gem | null)[][];
@@ -36,7 +36,6 @@ export class Board {
       this.grid[row] = [];
       for (let col = 0; col < this.cols; col++) {
         let gemType: GemType;
-        // Evita matches iniciais
         do {
           gemType = this.getRandomGemType();
         } while (this.wouldCreateMatch(row, col, gemType));
@@ -61,7 +60,6 @@ export class Board {
   }
 
   private wouldCreateMatch(row: number, col: number, type: GemType): boolean {
-    // Verifica horizontal (2 à esquerda)
     if (col >= 2) {
       const left1 = this.grid[row]?.[col - 1];
       const left2 = this.grid[row]?.[col - 2];
@@ -69,7 +67,6 @@ export class Board {
         return true;
       }
     }
-    // Verifica vertical (2 acima)
     if (row >= 2) {
       const up1 = this.grid[row - 1]?.[col];
       const up2 = this.grid[row - 2]?.[col];
@@ -102,7 +99,6 @@ export class Board {
       const dx = Math.abs(col - this.selectedGem.col);
       const dy = Math.abs(row - this.selectedGem.row);
 
-      // Só permite trocar adjacentes (não diagonal)
       if ((dx === 1 && dy === 0) || (dx === 0 && dy === 1)) {
         this.swapGems(this.selectedGem, { row, col });
       }
@@ -116,7 +112,6 @@ export class Board {
 
     if (!gem1 || !gem2) return;
 
-    // Troca
     this.grid[pos1.row][pos1.col] = gem2;
     this.grid[pos2.row][pos2.col] = gem1;
 
@@ -132,10 +127,8 @@ export class Board {
     gem2.y = pos1.row * this.cellSize;
     gem2.targetY = pos1.row * this.cellSize;
 
-    // Verifica se criou match
     const matches = this.findMatches();
     if (matches.length === 0) {
-      // Desfaz a troca se não criou match
       this.grid[pos1.row][pos1.col] = gem1;
       this.grid[pos2.row][pos2.col] = gem2;
 
@@ -151,7 +144,6 @@ export class Board {
       gem2.y = pos2.row * this.cellSize;
       gem2.targetY = pos2.row * this.cellSize;
     } else {
-      // Processa cascata de matches
       await this.processMatches();
     }
   }
@@ -162,7 +154,6 @@ export class Board {
       .fill(null)
       .map(() => Array(this.cols).fill(false));
 
-    // Verifica horizontais
     for (let row = 0; row < this.rows; row++) {
       for (let col = 0; col < this.cols - 2; col++) {
         const gem = this.grid[row][col];
@@ -187,7 +178,6 @@ export class Board {
       }
     }
 
-    // Verifica verticais
     for (let col = 0; col < this.cols; col++) {
       for (let row = 0; row < this.rows - 2; row++) {
         const gem = this.grid[row][col];
@@ -216,7 +206,6 @@ export class Board {
       }
     }
 
-    // Marca gemas como matched
     for (let row = 0; row < this.rows; row++) {
       for (let col = 0; col < this.cols; col++) {
         if (matched[row][col] && this.grid[row][col]) {
@@ -233,26 +222,20 @@ export class Board {
 
     let matches = this.findMatches();
     while (matches.length > 0) {
-      // Calcula pontos
       const points = matches.reduce((sum, m) => sum + m.gems.length * 10, 0);
       this.score += points;
       this.onScoreChange(this.score);
 
-      // Remove gemas matched
       await this.sleep(200);
       this.removeMatchedGems();
 
-      // Faz gemas caírem
       await this.sleep(100);
       this.dropGems();
 
-      // Preenche com novas gemas
       this.fillEmptySpaces();
 
-      // Anima queda
       await this.animateFall();
 
-      // Verifica novos matches (cascata)
       matches = this.findMatches();
     }
 
@@ -394,17 +377,21 @@ export class Board {
       }
     }
 
-    // Seleção
+    // Seleção com animação de pulso
     if (this.selectedGem) {
       const { row, col } = this.selectedGem;
+      const pulse = Math.sin(Date.now() / 150) * 2 + 3;
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = pulse;
+      ctx.shadowColor = '#ffffff';
+      ctx.shadowBlur = 15;
       ctx.strokeRect(
-        col * this.cellSize + 2,
-        row * this.cellSize + 2,
-        this.cellSize - 4,
-        this.cellSize - 4
+        col * this.cellSize + 3,
+        row * this.cellSize + 3,
+        this.cellSize - 6,
+        this.cellSize - 6
       );
+      ctx.shadowBlur = 0;
     }
   }
 
@@ -412,38 +399,159 @@ export class Board {
     const x = gem.x + this.padding;
     const y = gem.y + this.padding;
     const size = this.cellSize - this.padding * 2;
-    const radius = 10;
+    const radius = 12;
+    const centerX = x + size / 2;
+    const centerY = y + size / 2;
 
     // Glow para matched
     if (gem.isMatched) {
       ctx.shadowColor = '#ffffff';
-      ctx.shadowBlur = 20;
+      ctx.shadowBlur = 25;
     }
 
-    // Corpo da gema (retângulo arredondado)
-    ctx.fillStyle = GEM_COLORS[gem.type];
+    // Sombra da gema
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.beginPath();
+    ctx.roundRect(x + 2, y + 2, size, size, radius);
+    ctx.fill();
+
+    // Corpo da gema
+    const baseColor = GEM_COLORS[gem.type];
+    ctx.fillStyle = baseColor;
     ctx.beginPath();
     ctx.roundRect(x, y, size, size, radius);
     ctx.fill();
 
-    // Brilho
+    // Brilho superior
     const gradient = ctx.createLinearGradient(x, y, x, y + size);
-    gradient.addColorStop(0, 'rgba(255, 255, 255, 0.4)');
-    gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.1)');
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 0.5)');
+    gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.15)');
+    gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0)');
     gradient.addColorStop(1, 'rgba(0, 0, 0, 0.2)');
     ctx.fillStyle = gradient;
     ctx.beginPath();
     ctx.roundRect(x, y, size, size, radius);
     ctx.fill();
 
-    // Ícone
-    ctx.font = `${size * 0.5}px sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(GEM_ICONS[gem.type], x + size / 2, y + size / 2 + 2);
+    // Desenha ícone específico de cada elemento
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.lineWidth = 1.5;
+    
+    const iconSize = size * 0.45;
+    
+    switch (gem.type) {
+      case GemType.FIRE:
+        this.drawFlame(ctx, centerX, centerY, iconSize);
+        break;
+      case GemType.WATER:
+        this.drawDroplet(ctx, centerX, centerY, iconSize);
+        break;
+      case GemType.GRASS:
+        this.drawLeaf(ctx, centerX, centerY, iconSize);
+        break;
+      case GemType.ELECTRIC:
+        this.drawBolt(ctx, centerX, centerY, iconSize);
+        break;
+      case GemType.PSYCHIC:
+        this.drawCrystal(ctx, centerX, centerY, iconSize);
+        break;
+      case GemType.DARK:
+        this.drawStar(ctx, centerX, centerY, iconSize);
+        break;
+    }
 
     // Reset shadow
     ctx.shadowBlur = 0;
+  }
+
+  // Chama de fogo
+  private drawFlame(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number): void {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - size * 0.6);
+    ctx.bezierCurveTo(cx + size * 0.4, cy - size * 0.2, cx + size * 0.5, cy + size * 0.3, cx, cy + size * 0.5);
+    ctx.bezierCurveTo(cx - size * 0.5, cy + size * 0.3, cx - size * 0.4, cy - size * 0.2, cx, cy - size * 0.6);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  // Gota d'água
+  private drawDroplet(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number): void {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - size * 0.5);
+    ctx.bezierCurveTo(cx + size * 0.5, cy, cx + size * 0.4, cy + size * 0.5, cx, cy + size * 0.5);
+    ctx.bezierCurveTo(cx - size * 0.4, cy + size * 0.5, cx - size * 0.5, cy, cx, cy - size * 0.5);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  // Folha
+  private drawLeaf(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number): void {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - size * 0.5);
+    ctx.bezierCurveTo(cx + size * 0.6, cy - size * 0.3, cx + size * 0.6, cy + size * 0.3, cx, cy + size * 0.5);
+    ctx.bezierCurveTo(cx - size * 0.6, cy + size * 0.3, cx - size * 0.6, cy - size * 0.3, cx, cy - size * 0.5);
+    ctx.fill();
+    ctx.stroke();
+    // Nervura central
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - size * 0.35);
+    ctx.lineTo(cx, cy + size * 0.35);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.lineWidth = 1.5;
+  }
+
+  // Raio
+  private drawBolt(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number): void {
+    ctx.beginPath();
+    ctx.moveTo(cx + size * 0.1, cy - size * 0.55);
+    ctx.lineTo(cx - size * 0.2, cy - size * 0.05);
+    ctx.lineTo(cx + size * 0.05, cy - size * 0.05);
+    ctx.lineTo(cx - size * 0.15, cy + size * 0.55);
+    ctx.lineTo(cx + size * 0.15, cy + size * 0.05);
+    ctx.lineTo(cx - size * 0.1, cy + size * 0.05);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  // Cristal/Diamante
+  private drawCrystal(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number): void {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - size * 0.5);
+    ctx.lineTo(cx + size * 0.4, cy - size * 0.1);
+    ctx.lineTo(cx + size * 0.25, cy + size * 0.5);
+    ctx.lineTo(cx - size * 0.25, cy + size * 0.5);
+    ctx.lineTo(cx - size * 0.4, cy - size * 0.1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  // Estrela
+  private drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number): void {
+    const spikes = 5;
+    const outerRadius = size * 0.5;
+    const innerRadius = size * 0.25;
+    
+    ctx.beginPath();
+    for (let i = 0; i < spikes * 2; i++) {
+      const radius = i % 2 === 0 ? outerRadius : innerRadius;
+      const angle = (i * Math.PI / spikes) - Math.PI / 2;
+      const x = cx + Math.cos(angle) * radius;
+      const y = cy + Math.sin(angle) * radius;
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
   }
 
   public getScore(): number {
