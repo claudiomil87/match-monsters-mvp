@@ -92,7 +92,9 @@ class Game {
       if (this.powerUpBtn.classList.contains('active')) {
         this.board.cancelPowerUpMode();
         this.powerUpBtn.classList.remove('active');
-        this.powerUpHint.textContent = 'Toque para usar!';
+        this.powerUpHint.classList.remove('selecting');
+        const powerUp = this.board.getStoredPowerUp();
+        this.powerUpHint.textContent = powerUp ? `${powerUp.name}! Toque!` : 'Toque para usar!';
         return;
       }
 
@@ -105,7 +107,8 @@ class Game {
         if (powerUp?.type === 'shuffle') {
           this.powerUpHint.textContent = 'Embaralhando...';
         } else {
-          this.powerUpHint.textContent = 'Selecione o alvo!';
+          this.powerUpHint.textContent = '👆 Toque no alvo!';
+          this.powerUpHint.classList.add('selecting');
         }
       }
     });
@@ -141,6 +144,7 @@ class Game {
     this.powerUpMystery.style.display = 'block';
     this.powerUpReveal.style.display = 'none';
     this.powerUpHint.textContent = 'Match 4+ para carregar!';
+    this.powerUpHint.classList.remove('selecting');
   }
 
   private setupEventListeners(): void {

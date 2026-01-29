@@ -920,34 +920,21 @@ export class Board {
       ctx.fillText('Toque em uma gema para explodir!', this.getWidth() / 2, this.getHeight() / 2 + this.cellSize * 0.5);
     }
 
-    // Overlay de seleção de alvo para power-up
+    // Indicador visual de seleção de alvo para power-up (sem overlay escuro)
     if (this.selectingTarget && this.activePowerUp) {
-      // Escurece levemente
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-      ctx.fillRect(0, 0, this.getWidth(), this.getHeight());
-
-      // Borda pulsante indicando modo de seleção
-      const pulse = (Math.sin(Date.now() / 200) + 1) / 2;
-      ctx.strokeStyle = `rgba(255, 215, 0, ${0.5 + pulse * 0.5})`;
-      ctx.lineWidth = 4;
-      ctx.shadowColor = '#ffd700';
-      ctx.shadowBlur = 15;
-      ctx.strokeRect(2, 2, this.getWidth() - 4, this.getHeight() - 4);
-      ctx.shadowBlur = 0;
-
-      // Texto
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-      ctx.font = `bold ${this.cellSize * 0.3}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      
-      let text = 'Selecione o alvo';
+      // Auto-executa shuffle (não precisa de alvo)
       if (this.activePowerUp === PowerUpType.SHUFFLE) {
-        text = 'Embaralhando...';
-        // Auto-executa shuffle (não precisa de alvo)
         this.usePowerUp(0, 0);
+        return;
       }
-      ctx.fillText(text, this.getWidth() / 2, 10);
+
+      // Apenas borda sutil pulsante - sem escurecer
+      const pulse = (Math.sin(Date.now() / 200) + 1) / 2;
+      ctx.strokeStyle = `rgba(0, 255, 100, ${0.6 + pulse * 0.4})`;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([10, 5]);
+      ctx.strokeRect(1, 1, this.getWidth() - 2, this.getHeight() - 2);
+      ctx.setLineDash([]);
     }
   }
 

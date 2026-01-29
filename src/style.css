@@ -204,11 +204,18 @@ h1 {
 }
 
 .powerup-hint {
-  font-size: 0.6rem;
+  font-size: 0.65rem;
   color: rgba(255, 255, 255, 0.5);
-  max-width: 60px;
+  max-width: 70px;
   text-align: center;
   line-height: 1.2;
+  transition: all 0.2s ease;
+}
+
+.powerup-hint.selecting {
+  color: #00ff64;
+  font-weight: bold;
+  text-shadow: 0 0 10px rgba(0, 255, 100, 0.5);
 }
 
 .score-label {
