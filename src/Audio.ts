@@ -7,48 +7,48 @@ export class AudioManager {
   private musicInterval: number | null = null;
   private currentNote: number = 0;
   
-  // Melodia estilo Tetris/Korobeiniki simplificada
+  // Melodia estilo Tetris/Korobeiniki - versão relaxada
   private melody: { freq: number; duration: number }[] = [
-    // Tema principal (loop)
-    { freq: 659, duration: 0.2 },  // E5
-    { freq: 494, duration: 0.1 },  // B4
-    { freq: 523, duration: 0.1 },  // C5
-    { freq: 587, duration: 0.2 },  // D5
-    { freq: 523, duration: 0.1 },  // C5
-    { freq: 494, duration: 0.1 },  // B4
-    { freq: 440, duration: 0.2 },  // A4
-    { freq: 440, duration: 0.1 },  // A4
-    { freq: 523, duration: 0.1 },  // C5
-    { freq: 659, duration: 0.2 },  // E5
-    { freq: 587, duration: 0.1 },  // D5
-    { freq: 523, duration: 0.1 },  // C5
-    { freq: 494, duration: 0.3 },  // B4
-    { freq: 523, duration: 0.1 },  // C5
-    { freq: 587, duration: 0.2 },  // D5
-    { freq: 659, duration: 0.2 },  // E5
-    { freq: 523, duration: 0.2 },  // C5
-    { freq: 440, duration: 0.2 },  // A4
-    { freq: 440, duration: 0.3 },  // A4
-    { freq: 0, duration: 0.1 },    // Pausa
-    { freq: 587, duration: 0.2 },  // D5
-    { freq: 698, duration: 0.1 },  // F5
-    { freq: 880, duration: 0.2 },  // A5
-    { freq: 784, duration: 0.1 },  // G5
-    { freq: 698, duration: 0.1 },  // F5
-    { freq: 659, duration: 0.3 },  // E5
-    { freq: 523, duration: 0.1 },  // C5
-    { freq: 659, duration: 0.2 },  // E5
-    { freq: 587, duration: 0.1 },  // D5
-    { freq: 523, duration: 0.1 },  // C5
+    // Tema principal (loop) - mais lento e calmo
+    { freq: 659, duration: 0.4 },  // E5
     { freq: 494, duration: 0.2 },  // B4
-    { freq: 494, duration: 0.1 },  // B4
-    { freq: 523, duration: 0.1 },  // C5
-    { freq: 587, duration: 0.2 },  // D5
-    { freq: 659, duration: 0.2 },  // E5
     { freq: 523, duration: 0.2 },  // C5
+    { freq: 587, duration: 0.4 },  // D5
+    { freq: 523, duration: 0.2 },  // C5
+    { freq: 494, duration: 0.2 },  // B4
+    { freq: 440, duration: 0.4 },  // A4
     { freq: 440, duration: 0.2 },  // A4
-    { freq: 440, duration: 0.3 },  // A4
-    { freq: 0, duration: 0.2 },    // Pausa
+    { freq: 523, duration: 0.2 },  // C5
+    { freq: 659, duration: 0.4 },  // E5
+    { freq: 587, duration: 0.2 },  // D5
+    { freq: 523, duration: 0.2 },  // C5
+    { freq: 494, duration: 0.6 },  // B4
+    { freq: 523, duration: 0.2 },  // C5
+    { freq: 587, duration: 0.4 },  // D5
+    { freq: 659, duration: 0.4 },  // E5
+    { freq: 523, duration: 0.4 },  // C5
+    { freq: 440, duration: 0.4 },  // A4
+    { freq: 440, duration: 0.6 },  // A4
+    { freq: 0, duration: 0.3 },    // Pausa
+    { freq: 587, duration: 0.4 },  // D5
+    { freq: 698, duration: 0.2 },  // F5
+    { freq: 880, duration: 0.4 },  // A5
+    { freq: 784, duration: 0.2 },  // G5
+    { freq: 698, duration: 0.2 },  // F5
+    { freq: 659, duration: 0.6 },  // E5
+    { freq: 523, duration: 0.2 },  // C5
+    { freq: 659, duration: 0.4 },  // E5
+    { freq: 587, duration: 0.2 },  // D5
+    { freq: 523, duration: 0.2 },  // C5
+    { freq: 494, duration: 0.4 },  // B4
+    { freq: 494, duration: 0.2 },  // B4
+    { freq: 523, duration: 0.2 },  // C5
+    { freq: 587, duration: 0.4 },  // D5
+    { freq: 659, duration: 0.4 },  // E5
+    { freq: 523, duration: 0.4 },  // C5
+    { freq: 440, duration: 0.4 },  // A4
+    { freq: 440, duration: 0.6 },  // A4
+    { freq: 0, duration: 0.4 },    // Pausa
   ];
 
   constructor() {
