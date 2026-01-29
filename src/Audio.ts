@@ -196,6 +196,101 @@ export class AudioManager {
     osc.stop(this.ctx.currentTime + 0.2);
   }
 
+  // Som de "sem jogadas" - alerta dramático
+  public playNoMoves(): void {
+    this.init();
+    if (!this.ctx || !this.sfxGain) return;
+
+    // Acorde dramático descendente
+    const notes = [400, 350, 300, 250];
+    notes.forEach((freq, i) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      
+      osc.type = 'sawtooth';
+      osc.frequency.value = freq;
+      
+      const startTime = this.ctx!.currentTime + i * 0.1;
+      gain.gain.setValueAtTime(0.15, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.3);
+      
+      osc.connect(gain);
+      gain.connect(this.sfxGain!);
+      
+      osc.start(startTime);
+      osc.stop(startTime + 0.3);
+    });
+  }
+
+  // Som de power-up - épico!
+  public playPowerUp(): void {
+    this.init();
+    if (!this.ctx || !this.sfxGain) return;
+
+    // Sweep ascendente épico
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(200, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(800, this.ctx.currentTime + 0.2);
+    osc.frequency.exponentialRampToValueAtTime(1200, this.ctx.currentTime + 0.3);
+    
+    gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+    gain.gain.setValueAtTime(0.25, this.ctx.currentTime + 0.2);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
+    
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.5);
+
+    // Explosão de acordes
+    setTimeout(() => {
+      if (!this.ctx || !this.sfxGain) return;
+      const chordNotes = [523, 659, 784, 1047]; // C major com oitava
+      chordNotes.forEach((freq) => {
+        const o = this.ctx!.createOscillator();
+        const g = this.ctx!.createGain();
+        
+        o.type = 'square';
+        o.frequency.value = freq;
+        
+        g.gain.setValueAtTime(0.1, this.ctx!.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.01, this.ctx!.currentTime + 0.4);
+        
+        o.connect(g);
+        g.connect(this.sfxGain!);
+        
+        o.start();
+        o.stop(this.ctx!.currentTime + 0.4);
+      });
+    }, 200);
+  }
+
+  // Som de hint - suave
+  public playHint(): void {
+    this.init();
+    if (!this.ctx || !this.sfxGain) return;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+    osc.frequency.setValueAtTime(1000, this.ctx.currentTime + 0.1);
+    
+    gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+    
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.2);
+  }
+
   // Música de fundo
   public startMusic(): void {
     if (this.isMusicPlaying) return;

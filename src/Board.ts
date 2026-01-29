@@ -7,6 +7,9 @@ export interface BoardCallbacks {
   onCombo: (level: number) => void;
   onDrop: () => void;
   onInvalidMove: () => void;
+  onNoMoves: () => void;
+  onPowerUp: () => void;
+  onHint: () => void;
 }
 
 export class Board {
@@ -21,6 +24,16 @@ export class Board {
   private score: number = 0;
   private comboLevel: number = 0;
   private callbacks: BoardCallbacks;
+  
+  // Hint system
+  private hintPosition: Position | null = null;
+  private hintTarget: Position | null = null;
+  private lastMoveTime: number = Date.now();
+  private hintTimeout: number = 5000; // 5 segundos
+  
+  // Power-up system
+  private powerUpMode: boolean = false;
+  private noMovesOverlay: boolean = false;
 
   constructor(
     rows: number = 8,
@@ -38,6 +51,9 @@ export class Board {
       onCombo: callbacks.onCombo || (() => {}),
       onDrop: callbacks.onDrop || (() => {}),
       onInvalidMove: callbacks.onInvalidMove || (() => {}),
+      onNoMoves: callbacks.onNoMoves || (() => {}),
+      onPowerUp: callbacks.onPowerUp || (() => {}),
+      onHint: callbacks.onHint || (() => {}),
     };
     this.grid = [];
     this.initializeBoard();
@@ -103,6 +119,84 @@ export class Board {
     return this.rows * this.cellSize;
   }
 
+  // Verifica se existe alguma jogada possível
+  private findPossibleMove(): { from: Position; to: Position } | null {
+    for (let row = 0; row < this.rows; row++) {
+      for (let col = 0; col < this.cols; col++) {
+        // Tenta trocar com a direita
+        if (col < this.cols - 1) {
+          if (this.wouldCreateMatchIfSwapped({ row, col }, { row, col: col + 1 })) {
+            return { from: { row, col }, to: { row, col: col + 1 } };
+          }
+        }
+        // Tenta trocar com baixo
+        if (row < this.rows - 1) {
+          if (this.wouldCreateMatchIfSwapped({ row, col }, { row: row + 1, col })) {
+            return { from: { row, col }, to: { row: row + 1, col } };
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  private wouldCreateMatchIfSwapped(pos1: Position, pos2: Position): boolean {
+    const gem1 = this.grid[pos1.row][pos1.col];
+    const gem2 = this.grid[pos2.row][pos2.col];
+    if (!gem1 || !gem2) return false;
+
+    // Faz swap temporário
+    this.grid[pos1.row][pos1.col] = gem2;
+    this.grid[pos2.row][pos2.col] = gem1;
+
+    // Verifica matches
+    const hasMatch = this.checkForMatchAt(pos1) || this.checkForMatchAt(pos2);
+
+    // Desfaz swap
+    this.grid[pos1.row][pos1.col] = gem1;
+    this.grid[pos2.row][pos2.col] = gem2;
+
+    return hasMatch;
+  }
+
+  private checkForMatchAt(pos: Position): boolean {
+    const gem = this.grid[pos.row][pos.col];
+    if (!gem) return false;
+
+    // Horizontal
+    let count = 1;
+    let c = pos.col - 1;
+    while (c >= 0 && this.grid[pos.row][c]?.type === gem.type) { count++; c--; }
+    c = pos.col + 1;
+    while (c < this.cols && this.grid[pos.row][c]?.type === gem.type) { count++; c++; }
+    if (count >= 3) return true;
+
+    // Vertical
+    count = 1;
+    let r = pos.row - 1;
+    while (r >= 0 && this.grid[r][pos.col]?.type === gem.type) { count++; r--; }
+    r = pos.row + 1;
+    while (r < this.rows && this.grid[r][pos.col]?.type === gem.type) { count++; r++; }
+    if (count >= 3) return true;
+
+    return false;
+  }
+
+  // Atualiza hint
+  public update(): void {
+    if (this.isAnimating || this.powerUpMode || this.noMovesOverlay) return;
+
+    const now = Date.now();
+    if (now - this.lastMoveTime > this.hintTimeout && !this.hintPosition) {
+      const move = this.findPossibleMove();
+      if (move) {
+        this.hintPosition = move.from;
+        this.hintTarget = move.to;
+        this.callbacks.onHint();
+      }
+    }
+  }
+
   public handleClick(x: number, y: number): void {
     if (this.isAnimating) return;
 
@@ -110,6 +204,17 @@ export class Board {
     const row = Math.floor(y / this.cellSize);
 
     if (row < 0 || row >= this.rows || col < 0 || col >= this.cols) return;
+
+    // Power-up mode: explode área
+    if (this.powerUpMode) {
+      this.activatePowerUp(row, col);
+      return;
+    }
+
+    // Reset hint on interaction
+    this.lastMoveTime = Date.now();
+    this.hintPosition = null;
+    this.hintTarget = null;
 
     if (this.selectedGem === null) {
       this.selectedGem = { row, col };
@@ -124,14 +229,60 @@ export class Board {
     }
   }
 
+  private async activatePowerUp(row: number, col: number): Promise<void> {
+    this.powerUpMode = false;
+    this.noMovesOverlay = false;
+    this.isAnimating = true;
+    this.callbacks.onPowerUp();
+
+    // Explode área 3x3
+    for (let r = row - 1; r <= row + 1; r++) {
+      for (let c = col - 1; c <= col + 1; c++) {
+        if (r >= 0 && r < this.rows && c >= 0 && c < this.cols) {
+          if (this.grid[r][c]) {
+            this.grid[r][c]!.isMatched = true;
+          }
+        }
+      }
+    }
+
+    // Pontos bônus
+    this.score += 100;
+    this.callbacks.onScoreChange(this.score);
+
+    await this.sleep(300);
+    this.removeMatchedGems();
+
+    await this.sleep(100);
+    this.dropGems();
+    this.callbacks.onDrop();
+
+    this.fillEmptySpaces();
+    await this.animateFall();
+
+    // Verifica se gerou matches
+    const matches = this.findMatches();
+    if (matches.length > 0) {
+      await this.processMatches();
+    }
+
+    this.isAnimating = false;
+    this.lastMoveTime = Date.now();
+
+    // Verifica novamente se há jogadas
+    this.checkForNoMoves();
+  }
+
   private async swapGems(pos1: Position, pos2: Position): Promise<void> {
     const gem1 = this.grid[pos1.row][pos1.col];
     const gem2 = this.grid[pos2.row][pos2.col];
 
     if (!gem1 || !gem2) return;
 
-    // Som de swap
     this.callbacks.onSwap();
+    this.lastMoveTime = Date.now();
+    this.hintPosition = null;
+    this.hintTarget = null;
 
     this.grid[pos1.row][pos1.col] = gem2;
     this.grid[pos2.row][pos2.col] = gem1;
@@ -150,7 +301,6 @@ export class Board {
 
     const matches = this.findMatches();
     if (matches.length === 0) {
-      // Movimento inválido - desfaz
       this.callbacks.onInvalidMove();
       
       this.grid[pos1.row][pos1.col] = gem1;
@@ -169,6 +319,21 @@ export class Board {
       gem2.targetY = pos2.row * this.cellSize;
     } else {
       await this.processMatches();
+      
+      // Após processar, verifica se ainda há jogadas
+      this.checkForNoMoves();
+    }
+  }
+
+  private checkForNoMoves(): void {
+    if (this.isAnimating) return;
+    
+    const move = this.findPossibleMove();
+    if (!move) {
+      // Sem jogadas! Ativa power-up mode
+      this.noMovesOverlay = true;
+      this.powerUpMode = true;
+      this.callbacks.onNoMoves();
     }
   }
 
@@ -249,7 +414,6 @@ export class Board {
     while (matches.length > 0) {
       this.comboLevel++;
       
-      // Som de match ou combo
       if (this.comboLevel === 1) {
         this.callbacks.onMatch();
       } else {
@@ -413,8 +577,38 @@ export class Board {
       }
     }
 
+    // Hint animation
+    if (this.hintPosition && this.hintTarget) {
+      const pulse = (Math.sin(Date.now() / 200) + 1) / 2;
+      ctx.strokeStyle = `rgba(255, 215, 0, ${0.5 + pulse * 0.5})`;
+      ctx.lineWidth = 3;
+      ctx.shadowColor = '#ffd700';
+      ctx.shadowBlur = 10 + pulse * 10;
+      
+      // Pisca a gema de origem
+      ctx.strokeRect(
+        this.hintPosition.col * this.cellSize + 3,
+        this.hintPosition.row * this.cellSize + 3,
+        this.cellSize - 6,
+        this.cellSize - 6
+      );
+      
+      // Seta indicando direção
+      const fromX = this.hintPosition.col * this.cellSize + this.cellSize / 2;
+      const fromY = this.hintPosition.row * this.cellSize + this.cellSize / 2;
+      const toX = this.hintTarget.col * this.cellSize + this.cellSize / 2;
+      const toY = this.hintTarget.row * this.cellSize + this.cellSize / 2;
+      
+      ctx.beginPath();
+      ctx.moveTo(fromX, fromY);
+      ctx.lineTo(toX, toY);
+      ctx.stroke();
+      
+      ctx.shadowBlur = 0;
+    }
+
     // Feedback visual para drag
-    if (this.dragStartGem) {
+    if (this.dragStartGem && !this.powerUpMode) {
       const { row, col } = this.dragStartGem;
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
       ctx.lineWidth = 3;
@@ -430,7 +624,7 @@ export class Board {
     }
 
     // Seleção com animação de pulso (tap mode)
-    if (this.selectedGem && !this.dragStartGem) {
+    if (this.selectedGem && !this.dragStartGem && !this.powerUpMode) {
       const { row, col } = this.selectedGem;
       const pulse = Math.sin(Date.now() / 150) * 2 + 3;
       ctx.strokeStyle = '#ffffff';
@@ -444,6 +638,34 @@ export class Board {
         this.cellSize - 6
       );
       ctx.shadowBlur = 0;
+    }
+
+    // Overlay de "sem jogadas" + power-up mode
+    if (this.noMovesOverlay) {
+      // Escurece o fundo
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.fillRect(0, 0, this.getWidth(), this.getHeight());
+
+      // Texto "SEM JOGADAS!"
+      const pulse = (Math.sin(Date.now() / 300) + 1) / 2;
+      ctx.fillStyle = `rgba(255, 100, 100, ${0.8 + pulse * 0.2})`;
+      ctx.font = `bold ${this.cellSize * 0.5}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = '#ff0000';
+      ctx.shadowBlur = 20;
+      ctx.fillText('SEM JOGADAS!', this.getWidth() / 2, this.getHeight() / 2 - this.cellSize * 0.6);
+
+      // Texto do power-up
+      ctx.fillStyle = `rgba(100, 255, 100, ${0.8 + pulse * 0.2})`;
+      ctx.font = `bold ${this.cellSize * 0.35}px sans-serif`;
+      ctx.shadowColor = '#00ff00';
+      ctx.fillText('💣 SUPER PODER!', this.getWidth() / 2, this.getHeight() / 2);
+      
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.font = `${this.cellSize * 0.25}px sans-serif`;
+      ctx.shadowBlur = 0;
+      ctx.fillText('Toque em uma gema para explodir!', this.getWidth() / 2, this.getHeight() / 2 + this.cellSize * 0.5);
     }
   }
 
@@ -517,7 +739,6 @@ export class Board {
     ctx.shadowBlur = 0;
   }
 
-  // Chama de fogo
   private drawFlame(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number): void {
     ctx.beginPath();
     ctx.moveTo(cx, cy - size * 0.6);
@@ -527,7 +748,6 @@ export class Board {
     ctx.stroke();
   }
 
-  // Gota d'água
   private drawDroplet(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number): void {
     ctx.beginPath();
     ctx.moveTo(cx, cy - size * 0.5);
@@ -537,7 +757,6 @@ export class Board {
     ctx.stroke();
   }
 
-  // Folha
   private drawLeaf(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number): void {
     ctx.beginPath();
     ctx.moveTo(cx, cy - size * 0.5);
@@ -545,7 +764,6 @@ export class Board {
     ctx.bezierCurveTo(cx - size * 0.6, cy + size * 0.3, cx - size * 0.6, cy - size * 0.3, cx, cy - size * 0.5);
     ctx.fill();
     ctx.stroke();
-    // Nervura central
     ctx.beginPath();
     ctx.moveTo(cx, cy - size * 0.35);
     ctx.lineTo(cx, cy + size * 0.35);
@@ -556,7 +774,6 @@ export class Board {
     ctx.lineWidth = 1.5;
   }
 
-  // Raio
   private drawBolt(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number): void {
     ctx.beginPath();
     ctx.moveTo(cx + size * 0.1, cy - size * 0.55);
@@ -570,7 +787,6 @@ export class Board {
     ctx.stroke();
   }
 
-  // Cristal/Diamante
   private drawCrystal(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number): void {
     ctx.beginPath();
     ctx.moveTo(cx, cy - size * 0.5);
@@ -583,7 +799,6 @@ export class Board {
     ctx.stroke();
   }
 
-  // Estrela
   private drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number): void {
     const spikes = 5;
     const outerRadius = size * 0.5;
@@ -610,7 +825,6 @@ export class Board {
     return this.score;
   }
 
-  // Métodos para drag/swipe
   public setDragStart(x: number, y: number): void {
     if (this.isAnimating) return;
     
@@ -628,6 +842,16 @@ export class Board {
 
   public swipeGem(x: number, y: number, direction: 'left' | 'right' | 'up' | 'down'): void {
     if (this.isAnimating) return;
+
+    // Se em power-up mode, qualquer toque ativa
+    if (this.powerUpMode) {
+      const col = Math.floor(x / this.cellSize);
+      const row = Math.floor(y / this.cellSize);
+      if (row >= 0 && row < this.rows && col >= 0 && col < this.cols) {
+        this.activatePowerUp(row, col);
+      }
+      return;
+    }
 
     const col = Math.floor(x / this.cellSize);
     const row = Math.floor(y / this.cellSize);
@@ -652,15 +876,15 @@ export class Board {
         break;
     }
 
-    // Verifica se o target está dentro dos limites
     if (targetRow < 0 || targetRow >= this.rows || targetCol < 0 || targetCol >= this.cols) {
       return;
     }
 
-    // Limpa seleção anterior se houver
     this.selectedGem = null;
-    
-    // Executa o swap
     this.swapGems({ row, col }, { row: targetRow, col: targetCol });
+  }
+
+  public isPowerUpMode(): boolean {
+    return this.powerUpMode;
   }
 }

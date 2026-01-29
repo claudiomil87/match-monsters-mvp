@@ -48,6 +48,9 @@ class Game {
       onCombo: (level) => audio.playCombo(level),
       onDrop: () => audio.playDrop(),
       onInvalidMove: () => audio.playInvalid(),
+      onNoMoves: () => audio.playNoMoves(),
+      onPowerUp: () => audio.playPowerUp(),
+      onHint: () => audio.playHint(),
     });
 
     this.canvas.width = this.board.getWidth();
@@ -182,6 +185,9 @@ class Game {
   };
 
   private render(): void {
+    // Atualiza lógica (hint timer, etc)
+    this.board.update();
+    
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.board.render(this.ctx);
   }
