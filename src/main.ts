@@ -1,11 +1,13 @@
 import './style.css';
 import { Board } from './Board';
+import { audio } from './Audio';
 
 class Game {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private board!: Board;
   private scoreElement: HTMLElement;
+  private musicBtn: HTMLElement;
 
   // Grid 7x5 como Match Monsters
   private readonly COLS = 7;
@@ -16,15 +18,17 @@ class Game {
   private touchStartY: number = 0;
   private touchStartTime: number = 0;
   private isDragging: boolean = false;
-  private dragThreshold: number = 20; // pixels mínimos para considerar swipe
+  private dragThreshold: number = 20;
 
   constructor() {
     this.canvas = document.getElementById('game') as HTMLCanvasElement;
     this.ctx = this.canvas.getContext('2d')!;
     this.scoreElement = document.getElementById('score')!;
+    this.musicBtn = document.getElementById('music-btn')!;
 
     this.setupGame();
     this.setupEventListeners();
+    this.setupMusicButton();
     this.gameLoop();
 
     window.addEventListener('resize', () => this.setupGame());
@@ -37,12 +41,14 @@ class Game {
     const maxWidth = Math.min(window.innerWidth - 32, 420);
     const cellSize = Math.floor(maxWidth / this.COLS);
     
-    this.board = new Board(
-      this.ROWS,
-      this.COLS,
-      cellSize,
-      (score) => this.updateScore(score)
-    );
+    this.board = new Board(this.ROWS, this.COLS, cellSize, {
+      onScoreChange: (score) => this.updateScore(score),
+      onSwap: () => audio.playSwap(),
+      onMatch: () => audio.playMatch(),
+      onCombo: (level) => audio.playCombo(level),
+      onDrop: () => audio.playDrop(),
+      onInvalidMove: () => audio.playInvalid(),
+    });
 
     this.canvas.width = this.board.getWidth();
     this.canvas.height = this.board.getHeight();
@@ -50,7 +56,25 @@ class Game {
     this.canvas.style.height = `${this.board.getHeight()}px`;
   }
 
+  private setupMusicButton(): void {
+    this.musicBtn.addEventListener('click', () => {
+      audio.ensureStarted();
+      const isPlaying = audio.toggleMusic();
+      this.musicBtn.textContent = isPlaying ? '🔊' : '🔇';
+      this.musicBtn.classList.toggle('active', isPlaying);
+    });
+  }
+
   private setupEventListeners(): void {
+    // Primeiro toque inicia o contexto de áudio
+    const initAudio = () => {
+      audio.ensureStarted();
+      document.removeEventListener('touchstart', initAudio);
+      document.removeEventListener('click', initAudio);
+    };
+    document.addEventListener('touchstart', initAudio, { once: true });
+    document.addEventListener('click', initAudio, { once: true });
+
     // Mouse events (desktop)
     this.canvas.addEventListener('mousedown', (e) => this.handleTouchStart(e.clientX, e.clientY));
     this.canvas.addEventListener('mousemove', (e) => {
@@ -97,7 +121,6 @@ class Game {
     this.touchStartTime = Date.now();
     this.isDragging = true;
 
-    // Marca a gema inicial para feedback visual
     const coords = this.getCanvasCoords(clientX, clientY);
     this.board.setDragStart(coords.x, coords.y);
   }
@@ -109,7 +132,6 @@ class Game {
     const deltaY = clientY - this.touchStartY;
     const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
-    // Se moveu o suficiente, determina a direção e faz o swap
     if (distance >= this.dragThreshold) {
       let direction: 'left' | 'right' | 'up' | 'down';
       
@@ -133,7 +155,6 @@ class Game {
     const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
     const elapsed = Date.now() - this.touchStartTime;
 
-    // Se foi um tap rápido sem muito movimento, usa o sistema de click
     if (distance < this.dragThreshold && elapsed < 300) {
       const coords = this.getCanvasCoords(clientX, clientY);
       this.board.handleClick(coords.x, coords.y);
@@ -149,7 +170,6 @@ class Game {
 
   private updateScore(score: number): void {
     this.scoreElement.textContent = score.toString();
-    // Efeito visual no score
     this.scoreElement.style.transform = 'scale(1.2)';
     setTimeout(() => {
       this.scoreElement.style.transform = 'scale(1)';

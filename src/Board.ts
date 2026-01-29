@@ -1,5 +1,14 @@
 import { Gem, GemType, Position, Match, GEM_COLORS } from './types';
 
+export interface BoardCallbacks {
+  onScoreChange: (score: number) => void;
+  onSwap: () => void;
+  onMatch: () => void;
+  onCombo: (level: number) => void;
+  onDrop: () => void;
+  onInvalidMove: () => void;
+}
+
 export class Board {
   private grid: (Gem | null)[][];
   private readonly rows: number;
@@ -10,18 +19,26 @@ export class Board {
   private dragStartGem: Position | null = null;
   private isAnimating: boolean = false;
   private score: number = 0;
-  private onScoreChange: (score: number) => void;
+  private comboLevel: number = 0;
+  private callbacks: BoardCallbacks;
 
   constructor(
     rows: number = 8,
     cols: number = 8,
     cellSize: number = 60,
-    onScoreChange: (score: number) => void = () => {}
+    callbacks: Partial<BoardCallbacks> = {}
   ) {
     this.rows = rows;
     this.cols = cols;
     this.cellSize = cellSize;
-    this.onScoreChange = onScoreChange;
+    this.callbacks = {
+      onScoreChange: callbacks.onScoreChange || (() => {}),
+      onSwap: callbacks.onSwap || (() => {}),
+      onMatch: callbacks.onMatch || (() => {}),
+      onCombo: callbacks.onCombo || (() => {}),
+      onDrop: callbacks.onDrop || (() => {}),
+      onInvalidMove: callbacks.onInvalidMove || (() => {}),
+    };
     this.grid = [];
     this.initializeBoard();
   }
@@ -113,6 +130,9 @@ export class Board {
 
     if (!gem1 || !gem2) return;
 
+    // Som de swap
+    this.callbacks.onSwap();
+
     this.grid[pos1.row][pos1.col] = gem2;
     this.grid[pos2.row][pos2.col] = gem1;
 
@@ -130,6 +150,9 @@ export class Board {
 
     const matches = this.findMatches();
     if (matches.length === 0) {
+      // Movimento inválido - desfaz
+      this.callbacks.onInvalidMove();
+      
       this.grid[pos1.row][pos1.col] = gem1;
       this.grid[pos2.row][pos2.col] = gem2;
 
@@ -220,18 +243,29 @@ export class Board {
 
   private async processMatches(): Promise<void> {
     this.isAnimating = true;
+    this.comboLevel = 0;
 
     let matches = this.findMatches();
     while (matches.length > 0) {
-      const points = matches.reduce((sum, m) => sum + m.gems.length * 10, 0);
+      this.comboLevel++;
+      
+      // Som de match ou combo
+      if (this.comboLevel === 1) {
+        this.callbacks.onMatch();
+      } else {
+        this.callbacks.onCombo(this.comboLevel);
+      }
+
+      const points = matches.reduce((sum, m) => sum + m.gems.length * 10, 0) * this.comboLevel;
       this.score += points;
-      this.onScoreChange(this.score);
+      this.callbacks.onScoreChange(this.score);
 
       await this.sleep(200);
       this.removeMatchedGems();
 
       await this.sleep(100);
       this.dropGems();
+      this.callbacks.onDrop();
 
       this.fillEmptySpaces();
 
@@ -240,6 +274,7 @@ export class Board {
       matches = this.findMatches();
     }
 
+    this.comboLevel = 0;
     this.isAnimating = false;
   }
 

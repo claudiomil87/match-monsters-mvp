@@ -57,6 +57,12 @@ h1 {
   font-weight: 500;
 }
 
+.top-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .score-board {
   display: flex;
   align-items: center;
@@ -66,6 +72,36 @@ h1 {
   border-radius: 50px;
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.music-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  font-size: 1.3rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.music-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: scale(1.05);
+}
+
+.music-btn:active {
+  transform: scale(0.95);
+}
+
+.music-btn.active {
+  background: rgba(102, 187, 106, 0.3);
+  border-color: rgba(102, 187, 106, 0.5);
+  box-shadow: 0 0 15px rgba(102, 187, 106, 0.3);
 }
 
 .score-label {
