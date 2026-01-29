@@ -3,6 +3,14 @@
   padding: 0;
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
 }
 
 body {
@@ -15,17 +23,18 @@ body {
   align-items: center;
   justify-content: center;
   color: #fff;
-  overflow: hidden;
+  padding: 16px;
+  padding-top: env(safe-area-inset-top, 16px);
+  padding-bottom: env(safe-area-inset-bottom, 16px);
 }
 
 #app {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  padding: 16px;
+  gap: 12px;
   width: 100%;
-  max-width: 500px;
+  max-width: 420px;
 }
 
 header {
@@ -33,58 +42,56 @@ header {
 }
 
 h1 {
-  font-size: 2rem;
+  font-size: 1.6rem;
   font-weight: 800;
   background: linear-gradient(90deg, #ff5252, #ffca28, #66bb6a, #42a5f5, #ab47bc, #ec407a);
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  text-shadow: 0 0 40px rgba(255, 255, 255, 0.15);
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .subtitle {
   color: rgba(255, 255, 255, 0.5);
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 
 .score-board {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   background: rgba(255, 255, 255, 0.08);
-  padding: 12px 24px;
+  padding: 8px 20px;
   border-radius: 50px;
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .score-label {
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.7);
   letter-spacing: 1px;
 }
 
 #score {
-  font-size: 1.8rem;
+  font-size: 1.5rem;
   font-weight: 800;
   color: #ffca28;
   text-shadow: 0 0 20px rgba(255, 202, 40, 0.5);
-  min-width: 80px;
+  min-width: 60px;
   text-align: center;
 }
 
 .game-container {
   position: relative;
-  border-radius: 16px;
+  border-radius: 12px;
   overflow: hidden;
   box-shadow: 
     0 0 0 2px rgba(255, 255, 255, 0.1),
     0 8px 32px rgba(0, 0, 0, 0.4),
-    0 0 80px rgba(100, 100, 255, 0.15),
-    inset 0 0 60px rgba(0, 0, 0, 0.3);
+    0 0 60px rgba(100, 100, 255, 0.15);
 }
 
 #game {
@@ -96,13 +103,13 @@ h1 {
 .instructions {
   text-align: center;
   color: rgba(255, 255, 255, 0.6);
-  font-size: 0.85rem;
-  max-width: 320px;
-  line-height: 1.5;
+  font-size: 0.75rem;
+  max-width: 300px;
+  line-height: 1.4;
 }
 
 .instructions p {
-  margin: 6px 0;
+  margin: 4px 0;
 }
 
 .instructions strong {
@@ -110,59 +117,82 @@ h1 {
 }
 
 footer {
-  margin-top: 12px;
+  margin-top: 8px;
   color: rgba(255, 255, 255, 0.3);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
 }
 
 footer a {
   color: rgba(255, 255, 255, 0.5);
   text-decoration: none;
-  transition: color 0.2s;
 }
 
-footer a:hover {
-  color: rgba(255, 255, 255, 0.8);
-}
-
-/* Mobile adjustments */
-@media (max-width: 480px) {
+/* Small phones */
+@media (max-height: 700px) {
   #app {
-    gap: 12px;
-    padding: 12px;
+    gap: 8px;
   }
-
+  
   h1 {
-    font-size: 1.6rem;
+    font-size: 1.4rem;
   }
-
+  
+  .subtitle {
+    display: none;
+  }
+  
   .score-board {
-    padding: 10px 20px;
+    padding: 6px 16px;
   }
-
+  
   #score {
-    font-size: 1.5rem;
+    font-size: 1.3rem;
   }
-
+  
   .instructions {
-    font-size: 0.8rem;
+    font-size: 0.7rem;
+  }
+  
+  footer {
+    display: none;
   }
 }
 
-/* Landscape mobile */
-@media (max-height: 600px) and (orientation: landscape) {
+/* Very small screens */
+@media (max-height: 600px) {
+  header {
+    display: none;
+  }
+  
+  .instructions {
+    display: none;
+  }
+}
+
+/* Landscape */
+@media (orientation: landscape) and (max-height: 500px) {
+  body {
+    flex-direction: row;
+    justify-content: center;
+    gap: 20px;
+  }
+  
   #app {
     flex-direction: row;
     flex-wrap: wrap;
+    max-width: none;
     justify-content: center;
-    gap: 10px;
+    align-items: center;
   }
-
-  header {
-    width: 100%;
-  }
-
-  .instructions {
+  
+  header, .instructions, footer {
     display: none;
+  }
+  
+  .score-board {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
   }
 }
