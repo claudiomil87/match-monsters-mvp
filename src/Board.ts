@@ -7,6 +7,7 @@ export class Board {
   private readonly cellSize: number;
   private readonly padding: number = 4;
   private selectedGem: Position | null = null;
+  private dragStartGem: Position | null = null;
   private isAnimating: boolean = false;
   private score: number = 0;
   private onScoreChange: (score: number) => void;
@@ -377,8 +378,24 @@ export class Board {
       }
     }
 
-    // Seleção com animação de pulso
-    if (this.selectedGem) {
+    // Feedback visual para drag
+    if (this.dragStartGem) {
+      const { row, col } = this.dragStartGem;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.lineWidth = 3;
+      ctx.shadowColor = '#ffffff';
+      ctx.shadowBlur = 10;
+      ctx.strokeRect(
+        col * this.cellSize + 2,
+        row * this.cellSize + 2,
+        this.cellSize - 4,
+        this.cellSize - 4
+      );
+      ctx.shadowBlur = 0;
+    }
+
+    // Seleção com animação de pulso (tap mode)
+    if (this.selectedGem && !this.dragStartGem) {
       const { row, col } = this.selectedGem;
       const pulse = Math.sin(Date.now() / 150) * 2 + 3;
       ctx.strokeStyle = '#ffffff';
@@ -556,5 +573,59 @@ export class Board {
 
   public getScore(): number {
     return this.score;
+  }
+
+  // Métodos para drag/swipe
+  public setDragStart(x: number, y: number): void {
+    if (this.isAnimating) return;
+    
+    const col = Math.floor(x / this.cellSize);
+    const row = Math.floor(y / this.cellSize);
+    
+    if (row >= 0 && row < this.rows && col >= 0 && col < this.cols) {
+      this.dragStartGem = { row, col };
+    }
+  }
+
+  public clearDragStart(): void {
+    this.dragStartGem = null;
+  }
+
+  public swipeGem(x: number, y: number, direction: 'left' | 'right' | 'up' | 'down'): void {
+    if (this.isAnimating) return;
+
+    const col = Math.floor(x / this.cellSize);
+    const row = Math.floor(y / this.cellSize);
+
+    if (row < 0 || row >= this.rows || col < 0 || col >= this.cols) return;
+
+    let targetRow = row;
+    let targetCol = col;
+
+    switch (direction) {
+      case 'left':
+        targetCol = col - 1;
+        break;
+      case 'right':
+        targetCol = col + 1;
+        break;
+      case 'up':
+        targetRow = row - 1;
+        break;
+      case 'down':
+        targetRow = row + 1;
+        break;
+    }
+
+    // Verifica se o target está dentro dos limites
+    if (targetRow < 0 || targetRow >= this.rows || targetCol < 0 || targetCol >= this.cols) {
+      return;
+    }
+
+    // Limpa seleção anterior se houver
+    this.selectedGem = null;
+    
+    // Executa o swap
+    this.swapGems({ row, col }, { row: targetRow, col: targetCol });
   }
 }

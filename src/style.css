@@ -82,6 +82,7 @@ h1 {
   text-shadow: 0 0 20px rgba(255, 202, 40, 0.5);
   min-width: 60px;
   text-align: center;
+  transition: transform 0.15s ease-out;
 }
 
 .game-container {

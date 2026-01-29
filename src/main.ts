@@ -11,6 +11,13 @@ class Game {
   private readonly COLS = 7;
   private readonly ROWS = 5;
 
+  // Touch/drag state
+  private touchStartX: number = 0;
+  private touchStartY: number = 0;
+  private touchStartTime: number = 0;
+  private isDragging: boolean = false;
+  private dragThreshold: number = 20; // pixels mínimos para considerar swipe
+
   constructor() {
     this.canvas = document.getElementById('game') as HTMLCanvasElement;
     this.ctx = this.canvas.getContext('2d')!;
@@ -20,7 +27,6 @@ class Game {
     this.setupEventListeners();
     this.gameLoop();
 
-    // Recalcula no resize
     window.addEventListener('resize', () => this.setupGame());
     window.addEventListener('orientationchange', () => {
       setTimeout(() => this.setupGame(), 100);
@@ -28,12 +34,8 @@ class Game {
   }
 
   private setupGame(): void {
-    // Calcula tamanho da célula baseado na largura disponível
     const maxWidth = Math.min(window.innerWidth - 32, 420);
     const cellSize = Math.floor(maxWidth / this.COLS);
-    
-    // Recria o board se o tamanho mudou significativamente
-    const currentScore = this.board?.getScore() || 0;
     
     this.board = new Board(
       this.ROWS,
@@ -42,44 +44,116 @@ class Game {
       (score) => this.updateScore(score)
     );
 
-    // Se tinha score, mantém (não ideal mas funciona pro MVP)
-    if (currentScore > 0) {
-      this.board = new Board(
-        this.ROWS,
-        this.COLS,
-        cellSize,
-        (score) => this.updateScore(score)
-      );
-    }
-
-    // Ajusta canvas
     this.canvas.width = this.board.getWidth();
     this.canvas.height = this.board.getHeight();
-    
-    // CSS para escalar suavemente
     this.canvas.style.width = `${this.board.getWidth()}px`;
     this.canvas.style.height = `${this.board.getHeight()}px`;
   }
 
   private setupEventListeners(): void {
-    this.canvas.addEventListener('click', (e) => this.handleInput(e));
+    // Mouse events (desktop)
+    this.canvas.addEventListener('mousedown', (e) => this.handleTouchStart(e.clientX, e.clientY));
+    this.canvas.addEventListener('mousemove', (e) => {
+      if (this.isDragging) this.handleTouchMove(e.clientX, e.clientY);
+    });
+    this.canvas.addEventListener('mouseup', (e) => this.handleTouchEnd(e.clientX, e.clientY));
+    this.canvas.addEventListener('mouseleave', () => this.cancelDrag());
+
+    // Touch events (mobile)
     this.canvas.addEventListener('touchstart', (e) => {
       e.preventDefault();
-      this.handleInput(e.touches[0]);
+      const touch = e.touches[0];
+      this.handleTouchStart(touch.clientX, touch.clientY);
     }, { passive: false });
+
+    this.canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      this.handleTouchMove(touch.clientX, touch.clientY);
+    }, { passive: false });
+
+    this.canvas.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      const touch = e.changedTouches[0];
+      this.handleTouchEnd(touch.clientX, touch.clientY);
+    }, { passive: false });
+
+    this.canvas.addEventListener('touchcancel', () => this.cancelDrag());
   }
 
-  private handleInput(e: MouseEvent | Touch): void {
+  private getCanvasCoords(clientX: number, clientY: number): { x: number; y: number } {
     const rect = this.canvas.getBoundingClientRect();
     const scaleX = this.canvas.width / rect.width;
     const scaleY = this.canvas.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
-    this.board.handleClick(x, y);
+    return {
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY
+    };
+  }
+
+  private handleTouchStart(clientX: number, clientY: number): void {
+    this.touchStartX = clientX;
+    this.touchStartY = clientY;
+    this.touchStartTime = Date.now();
+    this.isDragging = true;
+
+    // Marca a gema inicial para feedback visual
+    const coords = this.getCanvasCoords(clientX, clientY);
+    this.board.setDragStart(coords.x, coords.y);
+  }
+
+  private handleTouchMove(clientX: number, clientY: number): void {
+    if (!this.isDragging) return;
+
+    const deltaX = clientX - this.touchStartX;
+    const deltaY = clientY - this.touchStartY;
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+    // Se moveu o suficiente, determina a direção e faz o swap
+    if (distance >= this.dragThreshold) {
+      let direction: 'left' | 'right' | 'up' | 'down';
+      
+      if (Math.abs(deltaX) > Math.abs(deltaY)) {
+        direction = deltaX > 0 ? 'right' : 'left';
+      } else {
+        direction = deltaY > 0 ? 'down' : 'up';
+      }
+
+      const coords = this.getCanvasCoords(this.touchStartX, this.touchStartY);
+      this.board.swipeGem(coords.x, coords.y, direction);
+      this.cancelDrag();
+    }
+  }
+
+  private handleTouchEnd(clientX: number, clientY: number): void {
+    if (!this.isDragging) return;
+
+    const deltaX = clientX - this.touchStartX;
+    const deltaY = clientY - this.touchStartY;
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    const elapsed = Date.now() - this.touchStartTime;
+
+    // Se foi um tap rápido sem muito movimento, usa o sistema de click
+    if (distance < this.dragThreshold && elapsed < 300) {
+      const coords = this.getCanvasCoords(clientX, clientY);
+      this.board.handleClick(coords.x, coords.y);
+    }
+
+    this.cancelDrag();
+  }
+
+  private cancelDrag(): void {
+    this.isDragging = false;
+    this.board.clearDragStart();
   }
 
   private updateScore(score: number): void {
     this.scoreElement.textContent = score.toString();
+    // Efeito visual no score
+    this.scoreElement.style.transform = 'scale(1.2)';
+    setTimeout(() => {
+      this.scoreElement.style.transform = 'scale(1)';
+    }, 150);
   }
 
   private gameLoop = (): void => {
