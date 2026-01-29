@@ -532,6 +532,53 @@ body {
   font-size: 0.7rem;
 }
 
+/* ===== SHARED BOARD (Turns Mode) ===== */
+.turns-shared .shared-board-container {
+  position: relative;
+  margin: auto 0;
+}
+
+.turn-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  border-radius: 12px;
+}
+
+.turn-overlay.active {
+  display: flex;
+}
+
+.turn-overlay-text {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #fff;
+  padding: 12px 24px;
+  background: rgba(66, 165, 245, 0.9);
+  border-radius: 30px;
+  animation: pulseAI 1s ease-in-out infinite;
+}
+
+@keyframes pulseAI {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.8; }
+}
+
+.turns-shared .vsai-header {
+  margin-bottom: 10px;
+}
+
+.turns-shared .instructions {
+  margin-top: 15px;
+}
+
 /* Small screens */
 @media (max-height: 700px) {
   .menu-title {

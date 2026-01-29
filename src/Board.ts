@@ -3,6 +3,7 @@ import { PowerUpType, ENERGY_NEEDED, getRandomPowerUp, PowerUpConfig } from './P
 
 export interface BoardCallbacks {
   onScoreChange: (score: number) => void;
+  onPointsScored: (points: number) => void; // Pontos ganhos (para atribuir ao jogador certo)
   onSwap: () => void;
   onMatch: () => void;
   onCombo: (level: number) => void;
@@ -59,6 +60,7 @@ export class Board {
     this.cellSize = cellSize;
     this.callbacks = {
       onScoreChange: callbacks.onScoreChange || (() => {}),
+      onPointsScored: callbacks.onPointsScored || (() => {}),
       onSwap: callbacks.onSwap || (() => {}),
       onMatch: callbacks.onMatch || (() => {}),
       onCombo: callbacks.onCombo || (() => {}),
@@ -272,6 +274,7 @@ export class Board {
 
     // Pontos bônus
     this.score += 100;
+    this.callbacks.onPointsScored(100);
     this.callbacks.onScoreChange(this.score);
 
     await this.sleep(300);
@@ -477,6 +480,7 @@ export class Board {
 
       const points = matches.reduce((sum, m) => sum + m.gems.length * 10, 0) * this.comboLevel;
       this.score += points;
+      this.callbacks.onPointsScored(points);
       this.callbacks.onScoreChange(this.score);
 
       await this.sleep(200);
@@ -593,6 +597,7 @@ export class Board {
     }
 
     this.score += 50;
+    this.callbacks.onPointsScored(50);
     this.callbacks.onScoreChange(this.score);
 
     await this.sleep(300);
@@ -624,6 +629,7 @@ export class Board {
     }
 
     this.score += 100;
+    this.callbacks.onPointsScored(100);
     this.callbacks.onScoreChange(this.score);
 
     await this.sleep(300);
@@ -657,7 +663,9 @@ export class Board {
       }
     }
 
-    this.score += count * 15;
+    const colorPoints = count * 15;
+    this.score += colorPoints;
+    this.callbacks.onPointsScored(colorPoints);
     this.callbacks.onScoreChange(this.score);
 
     await this.sleep(300);

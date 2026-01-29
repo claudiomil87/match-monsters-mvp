@@ -29,13 +29,10 @@ class Game {
   private timeAICtx: CanvasRenderingContext2D | null = null;
   private timeState: VsAITimeState | null = null;
   
-  // VS AI Turns mode
-  private turnsHumanBoard: Board | null = null;
-  private turnsAIBoard: Board | null = null;
-  private turnsHumanCanvas: HTMLCanvasElement | null = null;
-  private turnsAICanvas: HTMLCanvasElement | null = null;
-  private turnsHumanCtx: CanvasRenderingContext2D | null = null;
-  private turnsAICtx: CanvasRenderingContext2D | null = null;
+  // VS AI Turns mode (SHARED BOARD)
+  private turnsSharedBoard: Board | null = null;
+  private turnsSharedCanvas: HTMLCanvasElement | null = null;
+  private turnsSharedCtx: CanvasRenderingContext2D | null = null;
   private turnsState: VsAITurnsState | null = null;
   
   // Shared
@@ -425,11 +422,11 @@ class Game {
   }
 
   private renderVsAITurnsScreen(): void {
-    const maxWidth = Math.min(window.innerWidth - 32, 380);
+    const maxWidth = Math.min(window.innerWidth - 32, 420);
     const cellSize = Math.floor(maxWidth / this.COLS);
 
     this.app.innerHTML = `
-      <div class="game-screen vsai-screen active">
+      <div class="game-screen vsai-screen turns-shared active">
         <div class="vsai-header">
           <button class="back-btn" id="back-btn">←</button>
           <div class="player-info ai" id="ai-info">
@@ -448,68 +445,43 @@ class Game {
           <button class="music-btn" id="music-btn">🔇</button>
         </div>
 
-        <div class="board-label">🤖 IA</div>
-        <div class="game-container" id="ai-container">
-          <canvas id="ai-canvas"></canvas>
+        <div class="shared-board-container" id="shared-container">
+          <div class="turn-overlay" id="turn-overlay">
+            <span class="turn-overlay-text">VEZ DA IA...</span>
+          </div>
+          <canvas id="shared-canvas"></canvas>
         </div>
 
-        <div class="board-label">👤 Você</div>
-        <div class="game-container" id="human-container">
-          <canvas id="human-canvas"></canvas>
-        </div>
-
-        <p class="instructions">Match 4+ = jogada extra! Max ${TURNS_CONFIG.maxMoves} jogadas</p>
+        <p class="instructions">🎲 Mesmo tabuleiro! Match 4+ = jogada extra!</p>
       </div>
     `;
 
-    // Human board - permite jogadas sem match
-    this.turnsHumanCanvas = document.getElementById('human-canvas') as HTMLCanvasElement;
-    this.turnsHumanCtx = this.turnsHumanCanvas.getContext('2d')!;
-    this.turnsHumanBoard = new Board(this.ROWS, this.COLS, cellSize, {
-      onScoreChange: (s) => this.onTurnsHumanScore(s),
+    // Shared board - único tabuleiro para ambos
+    this.turnsSharedCanvas = document.getElementById('shared-canvas') as HTMLCanvasElement;
+    this.turnsSharedCtx = this.turnsSharedCanvas.getContext('2d')!;
+    this.turnsSharedBoard = new Board(this.ROWS, this.COLS, cellSize, {
+      onScoreChange: () => {}, // Não usamos o score do board
+      onPointsScored: (pts) => this.onTurnsPointsScored(pts),
       onSwap: () => audio.playSwap(),
       onMatch: () => audio.playMatch(),
       onCombo: (l) => audio.playCombo(l),
       onDrop: () => audio.playDrop(),
-      onInvalidMove: () => {},
+      onInvalidMove: () => audio.playInvalid(),
       onNoMoves: () => audio.playNoMoves(),
       onPowerUp: () => audio.playPowerUp(),
       onHint: () => {},
       onEnergyChange: () => {},
       onPowerUpReady: () => {},
       onPowerUpUsed: () => {},
-      onMatch4Plus: (count) => this.onTurnsMatch4Plus(count, Player.HUMAN),
-      onMoveComplete: (hadMatch) => this.onTurnsHumanMoveComplete(hadMatch),
+      onMatch4Plus: (count) => this.onTurnsMatch4Plus(count),
+      onMoveComplete: (hadMatch) => this.onTurnsMoveComplete(hadMatch),
     });
-    this.turnsHumanBoard.setAllowNoMatchMoves(true);
-    this.turnsHumanCanvas.width = this.turnsHumanBoard.getWidth();
-    this.turnsHumanCanvas.height = this.turnsHumanBoard.getHeight();
-
-    // AI board
-    this.turnsAICanvas = document.getElementById('ai-canvas') as HTMLCanvasElement;
-    this.turnsAICtx = this.turnsAICanvas.getContext('2d')!;
-    this.turnsAIBoard = new Board(this.ROWS, this.COLS, cellSize, {
-      onScoreChange: (s) => this.onTurnsAIScore(s),
-      onSwap: () => {},
-      onMatch: () => audio.playMatch(),
-      onCombo: (l) => audio.playCombo(l),
-      onDrop: () => {},
-      onInvalidMove: () => {},
-      onNoMoves: () => audio.playNoMoves(),
-      onPowerUp: () => audio.playPowerUp(),
-      onHint: () => {},
-      onEnergyChange: () => {},
-      onPowerUpReady: () => {},
-      onPowerUpUsed: () => {},
-      onMatch4Plus: (count) => this.onTurnsMatch4Plus(count, Player.AI),
-      onMoveComplete: () => this.onTurnsAIMoveComplete(),
-    });
-    this.turnsAIBoard.setAllowNoMatchMoves(true);
-    this.turnsAICanvas.width = this.turnsAIBoard.getWidth();
-    this.turnsAICanvas.height = this.turnsAIBoard.getHeight();
+    this.turnsSharedBoard.setAllowNoMatchMoves(true);
+    this.turnsSharedCanvas.width = this.turnsSharedBoard.getWidth();
+    this.turnsSharedCanvas.height = this.turnsSharedBoard.getHeight();
 
     this.setupCommonListeners();
-    this.setupCanvasEvents(this.turnsHumanCanvas, this.turnsHumanBoard);
+    this.setupCanvasEvents(this.turnsSharedCanvas, this.turnsSharedBoard);
     this.updateTurnsUI();
   }
 
@@ -519,13 +491,12 @@ class Game {
     this.turnsState.timeLeft = TURNS_CONFIG.moveTimeout;
     this.updateTurnsUI();
 
+    const overlay = document.getElementById('turn-overlay');
     if (this.turnsState.currentTurn === Player.AI) {
-      document.getElementById('human-container')?.classList.add('disabled');
-      document.getElementById('ai-container')?.classList.remove('disabled');
+      overlay?.classList.add('active');
       this.runTurnsAI();
     } else {
-      document.getElementById('human-container')?.classList.remove('disabled');
-      document.getElementById('ai-container')?.classList.add('disabled');
+      overlay?.classList.remove('active');
     }
 
     this.timer = window.setInterval(() => {
@@ -547,41 +518,41 @@ class Game {
     }, 1000);
   }
 
-  private onTurnsMatch4Plus(count: number, player: Player): void {
+  private onTurnsMatch4Plus(count: number): void {
     if (!this.turnsState) return;
     
     // Cada match de 4+ dá uma jogada extra (até o máximo)
-    if (this.turnsState.currentTurn === player) {
-      this.turnsState.movesLeft = Math.min(TURNS_CONFIG.maxMoves, this.turnsState.movesLeft + count);
-      this.updateTurnsUI();
-      audio.playCombo(2); // Som especial
-    }
+    this.turnsState.movesLeft = Math.min(TURNS_CONFIG.maxMoves, this.turnsState.movesLeft + count);
+    this.updateTurnsUI();
+    audio.playCombo(2); // Som especial
   }
 
-  private onTurnsHumanMoveComplete(_hadMatch: boolean): void {
-    if (!this.turnsState || this.turnsState.currentTurn !== Player.HUMAN) return;
+  private onTurnsPointsScored(points: number): void {
+    if (!this.turnsState) return;
+    
+    // Atribui pontos ao jogador do turno atual
+    if (this.turnsState.currentTurn === Player.HUMAN) {
+      this.turnsState.humanScore += points;
+      this.updateElement('human-score', this.turnsState.humanScore);
+    } else {
+      this.turnsState.aiScore += points;
+      this.updateElement('ai-score', this.turnsState.aiScore);
+    }
+    this.checkTurnsWin();
+  }
+
+  private onTurnsMoveComplete(_hadMatch: boolean): void {
+    if (!this.turnsState) return;
     
     // A jogada foi consumida
     this.turnsState.movesLeft--;
     
     if (this.turnsState.movesLeft <= 0) {
       this.endTurnsTurn();
-    } else {
-      // Ainda tem jogadas - reseta timer
+    } else if (this.turnsState.currentTurn === Player.HUMAN) {
+      // Humano ainda tem jogadas - reseta timer
       this.stopTimer();
       this.startTurnsMoveTimer();
-    }
-    
-    this.updateTurnsUI();
-  }
-
-  private onTurnsAIMoveComplete(): void {
-    if (!this.turnsState || this.turnsState.currentTurn !== Player.AI) return;
-    
-    this.turnsState.movesLeft--;
-    
-    if (this.turnsState.movesLeft <= 0) {
-      this.endTurnsTurn();
     }
     
     this.updateTurnsUI();
@@ -600,24 +571,24 @@ class Game {
   }
 
   private async runTurnsAI(): Promise<void> {
-    if (!this.turnsState || !this.turnsAIBoard) return;
+    if (!this.turnsState || !this.turnsSharedBoard) return;
     
     while (this.turnsState.movesLeft > 0 && !this.turnsState.isGameOver && this.turnsState.currentTurn === Player.AI) {
       await this.sleep(this.aiPlayer.getThinkingDelay());
       if (this.turnsState.currentTurn !== Player.AI) break;
       
-      const grid = this.turnsAIBoard.getGrid();
+      const grid = this.turnsSharedBoard.getGrid();
       const move = this.aiPlayer.findBestMove(grid as GemType[][], this.ROWS, this.COLS);
       
       if (move) {
-        this.turnsAIBoard.executeMove(move.from, move.to);
-        await this.sleep(this.aiPlayer.getMoveDelay() + 300);
+        this.turnsSharedBoard.executeMove(move.from, move.to);
+        await this.sleep(this.aiPlayer.getMoveDelay() + 400);
       } else {
         // Sem boas jogadas, faz qualquer movimento
         const anyMove = this.findAnyMove(grid as GemType[][]);
         if (anyMove) {
-          this.turnsAIBoard.executeMove(anyMove.from, anyMove.to);
-          await this.sleep(this.aiPlayer.getMoveDelay());
+          this.turnsSharedBoard.executeMove(anyMove.from, anyMove.to);
+          await this.sleep(this.aiPlayer.getMoveDelay() + 200);
         }
       }
     }
@@ -632,20 +603,6 @@ class Game {
       }
     }
     return null;
-  }
-
-  private onTurnsHumanScore(score: number): void {
-    if (!this.turnsState) return;
-    this.turnsState.humanScore = score;
-    this.updateElement('human-score', score);
-    this.checkTurnsWin();
-  }
-
-  private onTurnsAIScore(score: number): void {
-    if (!this.turnsState) return;
-    this.turnsState.aiScore = score;
-    this.updateElement('ai-score', score);
-    this.checkTurnsWin();
   }
 
   private checkTurnsWin(): void {
@@ -801,8 +758,7 @@ class Game {
     this.soloBoard = null;
     this.timeHumanBoard = null;
     this.timeAIBoard = null;
-    this.turnsHumanBoard = null;
-    this.turnsAIBoard = null;
+    this.turnsSharedBoard = null;
     this.timeState = null;
     this.turnsState = null;
   }
@@ -837,15 +793,10 @@ class Game {
     }
     
     if (this.currentMode === GameMode.VS_AI_TURNS) {
-      if (this.turnsHumanBoard && this.turnsHumanCtx && this.turnsHumanCanvas) {
-        this.turnsHumanBoard.update();
-        this.turnsHumanCtx.clearRect(0, 0, this.turnsHumanCanvas.width, this.turnsHumanCanvas.height);
-        this.turnsHumanBoard.render(this.turnsHumanCtx);
-      }
-      if (this.turnsAIBoard && this.turnsAICtx && this.turnsAICanvas) {
-        this.turnsAIBoard.update();
-        this.turnsAICtx.clearRect(0, 0, this.turnsAICanvas.width, this.turnsAICanvas.height);
-        this.turnsAIBoard.render(this.turnsAICtx);
+      if (this.turnsSharedBoard && this.turnsSharedCtx && this.turnsSharedCanvas) {
+        this.turnsSharedBoard.update();
+        this.turnsSharedCtx.clearRect(0, 0, this.turnsSharedCanvas.width, this.turnsSharedCanvas.height);
+        this.turnsSharedBoard.render(this.turnsSharedCtx);
       }
     }
   }
