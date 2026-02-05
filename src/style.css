@@ -603,13 +603,14 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  padding: 8px;
-  padding-top: max(8px, env(safe-area-inset-top));
-  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  justify-content: center; /* Centraliza verticalmente! */
+  padding: 4px;
+  padding-top: max(4px, env(safe-area-inset-top));
+  padding-bottom: max(4px, env(safe-area-inset-bottom));
   min-height: 100vh;
   min-height: 100dvh;
   overflow: hidden;
+  position: relative;
 }
 
 .battle-container {
@@ -732,29 +733,31 @@ body {
   }
 }
 
-/* Back button - minimal */
+/* Back button - minimal, fixed position */
 .back-btn-mini {
-  position: absolute;
-  top: 6px;
-  left: 6px;
+  position: fixed;
+  top: max(8px, env(safe-area-inset-top));
+  left: 8px;
   z-index: 100;
-  width: 28px;
-  height: 28px;
-  font-size: 1rem;
+  width: 32px;
+  height: 32px;
+  font-size: 1.1rem;
   padding: 0;
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
   color: #fff;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
+  backdrop-filter: blur(4px);
 }
 
 .back-btn-mini:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
 }
 
 /* Legacy back button */
