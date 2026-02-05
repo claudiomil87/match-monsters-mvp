@@ -927,20 +927,31 @@ export class Board {
       ctx.shadowBlur = 0;
     }
 
-    // Seleção com animação de pulso (tap mode)
+    // Seleção com animação de pulso (tap mode) - OCTAGONAL
     if (this.selectedGem && !this.dragStartGem && !this.powerUpMode) {
       const { row, col } = this.selectedGem;
       const pulse = Math.sin(Date.now() / 150) * 2 + 3;
+      const x = col * this.cellSize + 3;
+      const y = row * this.cellSize + 3;
+      const s = this.cellSize - 6;
+      const cut = s * 0.2;
+      
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = pulse;
       ctx.shadowColor = '#ffffff';
-      ctx.shadowBlur = 15;
-      ctx.strokeRect(
-        col * this.cellSize + 3,
-        row * this.cellSize + 3,
-        this.cellSize - 6,
-        this.cellSize - 6
-      );
+      ctx.shadowBlur = 20;
+      
+      ctx.beginPath();
+      ctx.moveTo(x + cut, y);
+      ctx.lineTo(x + s - cut, y);
+      ctx.lineTo(x + s, y + cut);
+      ctx.lineTo(x + s, y + s - cut);
+      ctx.lineTo(x + s - cut, y + s);
+      ctx.lineTo(x + cut, y + s);
+      ctx.lineTo(x, y + s - cut);
+      ctx.lineTo(x, y + cut);
+      ctx.closePath();
+      ctx.stroke();
       ctx.shadowBlur = 0;
     }
 
@@ -994,46 +1005,77 @@ export class Board {
     const x = gem.x + this.padding;
     const y = gem.y + this.padding;
     const size = this.cellSize - this.padding * 2;
-    const radius = 12;
     const centerX = x + size / 2;
     const centerY = y + size / 2;
+    const baseColor = GEM_COLORS[gem.type];
 
     // Glow para matched
     if (gem.isMatched) {
       ctx.shadowColor = '#ffffff';
-      ctx.shadowBlur = 25;
+      ctx.shadowBlur = 30;
     }
 
+    // === FORMA OCTAGONAL ===
+    const drawOctagon = (offsetX: number, offsetY: number, s: number) => {
+      const cut = s * 0.25; // Corte dos cantos
+      ctx.beginPath();
+      ctx.moveTo(offsetX + cut, offsetY);
+      ctx.lineTo(offsetX + s - cut, offsetY);
+      ctx.lineTo(offsetX + s, offsetY + cut);
+      ctx.lineTo(offsetX + s, offsetY + s - cut);
+      ctx.lineTo(offsetX + s - cut, offsetY + s);
+      ctx.lineTo(offsetX + cut, offsetY + s);
+      ctx.lineTo(offsetX, offsetY + s - cut);
+      ctx.lineTo(offsetX, offsetY + cut);
+      ctx.closePath();
+    };
+
     // Sombra da gema
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-    ctx.beginPath();
-    ctx.roundRect(x + 2, y + 2, size, size, radius);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    drawOctagon(x + 2, y + 2, size);
     ctx.fill();
 
-    // Corpo da gema
-    const baseColor = GEM_COLORS[gem.type];
-    ctx.fillStyle = baseColor;
-    ctx.beginPath();
-    ctx.roundRect(x, y, size, size, radius);
+    // Corpo principal com gradiente
+    const bodyGradient = ctx.createLinearGradient(x, y, x + size, y + size);
+    bodyGradient.addColorStop(0, this.lightenColor(baseColor, 20));
+    bodyGradient.addColorStop(0.5, baseColor);
+    bodyGradient.addColorStop(1, this.darkenColor(baseColor, 20));
+    ctx.fillStyle = bodyGradient;
+    drawOctagon(x, y, size);
     ctx.fill();
 
-    // Brilho superior
-    const gradient = ctx.createLinearGradient(x, y, x, y + size);
-    gradient.addColorStop(0, 'rgba(255, 255, 255, 0.5)');
-    gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.15)');
-    gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0)');
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.2)');
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.roundRect(x, y, size, size, radius);
+    // Borda externa
+    ctx.strokeStyle = this.darkenColor(baseColor, 30);
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Brilho interno (highlight superior)
+    const innerGlow = ctx.createLinearGradient(x, y, x, y + size * 0.6);
+    innerGlow.addColorStop(0, 'rgba(255, 255, 255, 0.5)');
+    innerGlow.addColorStop(0.4, 'rgba(255, 255, 255, 0.2)');
+    innerGlow.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = innerGlow;
+    drawOctagon(x, y, size);
     ctx.fill();
+
+    // Reflexo de luz (pequeno brilho no canto)
+    const reflectSize = size * 0.15;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.beginPath();
+    ctx.ellipse(x + size * 0.25, y + size * 0.25, reflectSize, reflectSize * 0.6, -Math.PI / 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Efeito de partículas para gemas matched
+    if (gem.isMatched) {
+      this.drawSparkles(ctx, centerX, centerY, size);
+    }
 
     // Desenha ícone específico de cada elemento
     ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
     ctx.lineWidth = 1.5;
     
-    const iconSize = size * 0.45;
+    const iconSize = size * 0.4;
     
     switch (gem.type) {
       case GemType.FIRE:
@@ -1179,6 +1221,44 @@ export class Board {
     ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
     ctx.lineWidth = 1.5;
+  }
+
+  // === EFEITOS VISUAIS AVANÇADOS ===
+  
+  private drawSparkles(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number): void {
+    const time = Date.now() / 100;
+    const sparkleCount = 6;
+    
+    for (let i = 0; i < sparkleCount; i++) {
+      const angle = (i / sparkleCount) * Math.PI * 2 + time * 0.1;
+      const dist = size * 0.3 + Math.sin(time + i) * size * 0.1;
+      const x = cx + Math.cos(angle) * dist;
+      const y = cy + Math.sin(angle) * dist;
+      const sparkleSize = 2 + Math.sin(time * 2 + i) * 1.5;
+      
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.5 + Math.sin(time + i) * 0.3})`;
+      ctx.beginPath();
+      ctx.arc(x, y, sparkleSize, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  
+  private lightenColor(hex: string, percent: number): string {
+    const num = parseInt(hex.replace('#', ''), 16);
+    const amt = Math.round(2.55 * percent);
+    const R = Math.min(255, (num >> 16) + amt);
+    const G = Math.min(255, ((num >> 8) & 0x00FF) + amt);
+    const B = Math.min(255, (num & 0x0000FF) + amt);
+    return `#${(0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1)}`;
+  }
+  
+  private darkenColor(hex: string, percent: number): string {
+    const num = parseInt(hex.replace('#', ''), 16);
+    const amt = Math.round(2.55 * percent);
+    const R = Math.max(0, (num >> 16) - amt);
+    const G = Math.max(0, ((num >> 8) & 0x00FF) - amt);
+    const B = Math.max(0, (num & 0x0000FF) - amt);
+    return `#${(0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1)}`;
   }
 
   public getScore(): number {
