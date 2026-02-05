@@ -1037,6 +1037,9 @@ export class Board {
       case GemType.DARK:
         this.drawStar(ctx, centerX, centerY, iconSize);
         break;
+      case GemType.BERRY:
+        this.drawBerry(ctx, centerX, centerY, iconSize);
+        break;
     }
 
     // Reset shadow
@@ -1123,6 +1126,42 @@ export class Board {
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
+  }
+
+  private drawBerry(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number): void {
+    // Desenha duas frutas (cereja/berry)
+    const berryRadius = size * 0.25;
+    
+    // Berry esquerda
+    ctx.beginPath();
+    ctx.arc(cx - size * 0.2, cy + size * 0.1, berryRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    
+    // Berry direita
+    ctx.beginPath();
+    ctx.arc(cx + size * 0.2, cy + size * 0.1, berryRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    
+    // Caule
+    ctx.strokeStyle = 'rgba(100, 200, 100, 0.9)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx - size * 0.15, cy - size * 0.1);
+    ctx.quadraticCurveTo(cx, cy - size * 0.4, cx + size * 0.15, cy - size * 0.1);
+    ctx.stroke();
+    
+    // Folha
+    ctx.fillStyle = 'rgba(100, 200, 100, 0.9)';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy - size * 0.35, size * 0.15, size * 0.08, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Restaura estilos
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.lineWidth = 1.5;
   }
 
   public getScore(): number {

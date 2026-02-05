@@ -10,6 +10,20 @@ import {
 } from './GameState';
 import { AIPlayer } from './AIPlayer';
 import { GemType } from './types';
+import { 
+  createRandomTeam, 
+  Team, 
+  Monster,
+  getActiveMonster,
+  countAliveMonsters 
+} from './Monster';
+import { 
+  BattleSystem, 
+  BattleState, 
+  BattleAction,
+  DEFAULT_BATTLE_CONFIG 
+} from './BattleSystem';
+import { BattleUI } from './BattleUI';
 
 class Game {
   private app: HTMLElement;
@@ -35,6 +49,16 @@ class Game {
   private turnsSharedCtx: CanvasRenderingContext2D | null = null;
   private turnsState: VsAITurnsState | null = null;
   
+  // Battle Mode (NEW!)
+  private battleBoard: Board | null = null;
+  private battleCanvas: HTMLCanvasElement | null = null;
+  private battleCtx: CanvasRenderingContext2D | null = null;
+  private battleUICanvas: HTMLCanvasElement | null = null;
+  private battleUICtx: CanvasRenderingContext2D | null = null;
+  private battleSystem: BattleSystem | null = null;
+  private battleUI: BattleUI | null = null;
+  private battleStage: number = 1;
+  
   // Shared
   private timer: number | null = null;
   private aiPlayer: AIPlayer = new AIPlayer();
@@ -47,7 +71,7 @@ class Game {
   private dragThreshold: number = 20;
   
   private readonly COLS = 7;
-  private readonly ROWS = 5;
+  private readonly ROWS = 6; // Increased to 6 rows for better gameplay
 
   constructor() {
     this.app = document.getElementById('app')!;
@@ -67,6 +91,12 @@ class Game {
           <p class="menu-subtitle">Escolha o modo de jogo</p>
           
           <div class="menu-buttons">
+            <button class="menu-btn battle-btn" data-mode="battle">
+              <span class="btn-emoji">⚔️</span>
+              <span class="btn-title">BATALHA PvE</span>
+              <span class="btn-desc">Derrote os monstros inimigos!</span>
+            </button>
+            
             <button class="menu-btn solo-btn" data-mode="solo">
               <span class="btn-emoji">🎯</span>
               <span class="btn-title">SOLO</span>
@@ -96,199 +126,540 @@ class Game {
         audio.ensureStarted();
         audio.playSwap();
         const mode = (btn as HTMLElement).dataset.mode;
-        if (mode === 'solo') this.startSoloMode();
+        if (mode === 'battle') this.startBattleMode();
+        else if (mode === 'solo') this.startSoloMode();
         else if (mode === 'vs_ai_time') this.startVsAITimeMode();
         else if (mode === 'vs_ai_turns') this.startVsAITurnsMode();
       });
     });
   }
 
+  // ===== BATTLE MODE (NEW!) =====
+  private startBattleMode(): void {
+    this.currentMode = GameMode.VS_AI_TURNS; // Reusing turns mode enum
+    this.cleanup();
+    
+    // Create teams
+    const playerTeam = createRandomTeam('Você', '😎', 2);
+    const enemyTeam = createRandomTeam('Oponente', '🤖', 2);
+    
+    // Calculate dimensions
+    const cellSize = Math.min(50, Math.floor((window.innerWidth - 40) / this.COLS));
+    const boardWidth = this.COLS * cellSize;
+    const boardHeight = this.ROWS * cellSize;
+    const uiHeight = 200; // Space for battle UI
+    const totalHeight = uiHeight + boardHeight + 80; // +80 for score/info
+    
+    this.app.innerHTML = `
+      <div class="battle-screen">
+        <div class="battle-container">
+          <canvas id="battleUICanvas" width="${boardWidth}" height="${uiHeight}"></canvas>
+          <canvas id="battleCanvas" width="${boardWidth}" height="${boardHeight}"></canvas>
+          <div class="battle-footer">
+            <div class="score-display">
+              <span id="battleScore">Pontos: 0</span>
+            </div>
+            <div class="power-up-area">
+              <button id="powerUpBtn" class="power-up-btn hidden">
+                <span id="powerUpIcon">💥</span>
+                <span id="powerUpName">Power-Up</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <button class="back-btn" id="backBtn">← Menu</button>
+      </div>
+    `;
+    
+    // Setup canvases
+    this.battleCanvas = document.getElementById('battleCanvas') as HTMLCanvasElement;
+    this.battleCtx = this.battleCanvas.getContext('2d')!;
+    this.battleUICanvas = document.getElementById('battleUICanvas') as HTMLCanvasElement;
+    this.battleUICtx = this.battleUICanvas.getContext('2d')!;
+    
+    // Create board with berry gems enabled
+    this.battleBoard = new Board(this.ROWS, this.COLS, cellSize, {
+      onScoreChange: (score) => {
+        document.getElementById('battleScore')!.textContent = `Pontos: ${score}`;
+      },
+      onPointsScored: (points) => {
+        // Points will be processed by battle system
+      },
+      onSwap: () => audio.playSwap(),
+      onMatch: () => {
+        audio.playMatch();
+        // Process matches in battle system
+        if (this.battleSystem && this.battleBoard) {
+          const grid = this.battleBoard.getGrid();
+          // Convert grid to matches for battle processing
+        }
+      },
+      onCombo: (level) => {
+        audio.playCombo();
+        if (this.battleUI) {
+          this.battleUI.showActionMessage(`COMBO x${level}!`, 1000);
+        }
+      },
+      onDrop: () => audio.playDrop(),
+      onInvalidMove: () => audio.playInvalid(),
+      onNoMoves: () => audio.playPowerUp(),
+      onPowerUp: () => audio.playPowerUp(),
+      onHint: () => {},
+      onEnergyChange: this.updatePowerUpUI.bind(this),
+      onPowerUpReady: this.onPowerUpReady.bind(this),
+      onPowerUpUsed: () => {
+        audio.playPowerUp();
+        this.hidePowerUpUI();
+      },
+      onMatch4Plus: (count) => {},
+      onMoveComplete: (hadMatch) => {
+        if (this.battleSystem) {
+          this.battleSystem.onMoveMade(hadMatch);
+          this.processBattleMatches();
+        }
+      },
+    });
+    
+    // Enable no-match moves for battle mode
+    this.battleBoard.setAllowNoMatchMoves(true);
+    
+    // Create battle system
+    this.battleSystem = new BattleSystem(
+      playerTeam,
+      enemyTeam,
+      DEFAULT_BATTLE_CONFIG,
+      {
+        onDamage: (action) => this.onBattleDamage(action),
+        onHeal: (action) => this.onBattleHeal(action),
+        onEvolve: (name, team) => this.onBattleEvolve(name, team),
+        onDefeat: (name, team) => this.onBattleDefeat(name, team),
+        onTurnChange: (turn) => this.onTurnChange(turn),
+        onGameOver: (winner) => this.onBattleGameOver(winner),
+        onTimeUpdate: (time) => {},
+        onMovesUpdate: (moves) => {},
+      }
+    );
+    this.battleSystem.setStage(this.battleStage);
+    
+    // Create battle UI
+    this.battleUI = new BattleUI(this.battleUICanvas);
+    
+    // Start battle timer
+    this.battleSystem.startTimer();
+    
+    // Setup input
+    this.setupBattleInput();
+    
+    // Back button
+    document.getElementById('backBtn')?.addEventListener('click', () => {
+      audio.playSwap();
+      this.showMenu();
+    });
+    
+    // Power-up button
+    document.getElementById('powerUpBtn')?.addEventListener('click', () => {
+      if (this.battleBoard?.hasPowerUp()) {
+        if (this.battleBoard.activateStoredPowerUp()) {
+          audio.playPowerUp();
+        }
+      }
+    });
+  }
+  
+  private processBattleMatches(): void {
+    if (!this.battleSystem || !this.battleBoard) return;
+    
+    // Get the current board state and find what matched
+    // This is a simplified version - in a real implementation
+    // you'd track matches as they happen in the Board class
+    
+    // For now, we'll simulate based on points scored
+    const score = this.battleBoard.getScore();
+    
+    // The battle system processes damage based on matches
+    // The actual match data would come from the Board
+  }
+  
+  private onBattleDamage(action: BattleAction): void {
+    if (this.battleUI && this.battleUICanvas) {
+      const x = action.target === 'player' ? 100 : this.battleUICanvas.width - 100;
+      const y = 120;
+      this.battleUI.addDamagePopup(
+        x, y, action.amount, false,
+        action.type === 'super_effective'
+      );
+      
+      if (action.type === 'super_effective') {
+        this.battleUI.showActionMessage('Super Efetivo! 💥', 1000);
+      }
+    }
+  }
+  
+  private onBattleHeal(action: BattleAction): void {
+    if (this.battleUI && this.battleUICanvas) {
+      const x = action.target === 'player' ? 100 : this.battleUICanvas.width - 100;
+      const y = 120;
+      this.battleUI.addDamagePopup(x, y, action.amount, true);
+    }
+  }
+  
+  private onBattleEvolve(name: string, team: 'player' | 'enemy'): void {
+    if (this.battleUI && this.battleUICanvas) {
+      const x = team === 'player' ? 100 : this.battleUICanvas.width - 100;
+      this.battleUI.addEvolutionEffect(x, 100, name);
+      this.battleUI.showActionMessage(`${name} EVOLUIU! ✨`, 2000);
+      audio.playPowerUp();
+    }
+  }
+  
+  private onBattleDefeat(name: string, team: 'player' | 'enemy'): void {
+    if (this.battleUI) {
+      this.battleUI.showActionMessage(`${name} foi derrotado! 💀`, 1500);
+    }
+  }
+  
+  private onTurnChange(turn: 'player' | 'enemy'): void {
+    if (this.battleUI) {
+      const message = turn === 'player' ? 'Sua vez!' : 'Vez do oponente...';
+      this.battleUI.showActionMessage(message, 1000);
+    }
+    
+    // If it's AI's turn, make AI move
+    if (turn === 'enemy' && this.battleSystem && this.battleBoard) {
+      this.doAIBattleMove();
+    }
+  }
+  
+  private async doAIBattleMove(): Promise<void> {
+    if (!this.battleBoard || !this.battleSystem || this.battleSystem.isGameOver()) return;
+    
+    const state = this.battleSystem.getState();
+    
+    // Wait a bit before AI moves
+    await this.sleep(this.aiPlayer.getThinkingDelay());
+    
+    for (let i = 0; i < state.movesLeft; i++) {
+      if (this.battleSystem.isGameOver() || this.battleSystem.getCurrentTurn() !== 'enemy') break;
+      
+      const grid = this.battleBoard.getGrid();
+      const move = this.aiPlayer.findBestMove(grid, this.ROWS, this.COLS);
+      
+      if (move) {
+        await this.sleep(this.aiPlayer.getMoveDelay());
+        this.battleBoard.executeMove(move.from, move.to);
+      }
+      
+      // Wait for animations
+      await this.sleep(500);
+    }
+  }
+  
+  private onBattleGameOver(winner: 'player' | 'enemy'): void {
+    if (winner === 'player') {
+      this.battleStage++;
+      audio.playPowerUp();
+    }
+  }
+  
+  private setupBattleInput(): void {
+    if (!this.battleCanvas) return;
+    
+    const canvas = this.battleCanvas;
+    
+    // Click
+    canvas.addEventListener('click', (e) => {
+      if (this.battleSystem?.getCurrentTurn() !== 'player') return;
+      if (this.battleSystem?.isGameOver()) {
+        // Check for restart button click
+        const rect = this.battleUICanvas!.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top + (this.battleUICanvas?.height || 0);
+        
+        if (this.battleUI?.checkRestartClick(x, y, this.battleSystem.getState())) {
+          this.startBattleMode();
+        }
+        return;
+      }
+      
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      this.battleBoard?.handleClick(x, y);
+    });
+    
+    // Touch
+    canvas.addEventListener('touchstart', (e) => {
+      if (this.battleSystem?.getCurrentTurn() !== 'player') return;
+      if (this.battleSystem?.isGameOver()) return;
+      
+      e.preventDefault();
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      this.touchStartX = touch.clientX - rect.left;
+      this.touchStartY = touch.clientY - rect.top;
+      this.touchStartTime = Date.now();
+      this.isDragging = false;
+      
+      this.battleBoard?.setDragStart(this.touchStartX, this.touchStartY);
+    }, { passive: false });
+    
+    canvas.addEventListener('touchmove', (e) => {
+      if (this.battleSystem?.getCurrentTurn() !== 'player') return;
+      if (this.battleSystem?.isGameOver()) return;
+      
+      e.preventDefault();
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+      
+      const dx = x - this.touchStartX;
+      const dy = y - this.touchStartY;
+      
+      if (!this.isDragging && (Math.abs(dx) > this.dragThreshold || Math.abs(dy) > this.dragThreshold)) {
+        this.isDragging = true;
+        
+        let direction: 'left' | 'right' | 'up' | 'down';
+        if (Math.abs(dx) > Math.abs(dy)) {
+          direction = dx > 0 ? 'right' : 'left';
+        } else {
+          direction = dy > 0 ? 'down' : 'up';
+        }
+        
+        this.battleBoard?.swipeGem(this.touchStartX, this.touchStartY, direction);
+        this.battleBoard?.clearDragStart();
+      }
+    }, { passive: false });
+    
+    canvas.addEventListener('touchend', (e) => {
+      if (this.battleSystem?.getCurrentTurn() !== 'player') return;
+      if (this.battleSystem?.isGameOver()) return;
+      
+      e.preventDefault();
+      
+      if (!this.isDragging) {
+        const elapsed = Date.now() - this.touchStartTime;
+        if (elapsed < 300) {
+          this.battleBoard?.handleClick(this.touchStartX, this.touchStartY);
+        }
+      }
+      
+      this.battleBoard?.clearDragStart();
+      this.isDragging = false;
+    }, { passive: false });
+  }
+  
+  private renderBattle(): void {
+    if (!this.battleBoard || !this.battleCtx || !this.battleUICtx || !this.battleUI || !this.battleSystem) return;
+    
+    // Clear canvases
+    this.battleUICtx.clearRect(0, 0, this.battleUICanvas!.width, this.battleUICanvas!.height);
+    this.battleCtx.clearRect(0, 0, this.battleCanvas!.width, this.battleCanvas!.height);
+    
+    // Render battle UI (monsters, HP, timer)
+    this.battleUI.render(this.battleSystem.getState(), 0);
+    
+    // Render board
+    this.battleBoard.render(this.battleCtx);
+    this.battleBoard.update();
+  }
+
   // ===== SOLO MODE =====
   private startSoloMode(): void {
     this.currentMode = GameMode.SOLO;
-    this.renderSoloScreen();
-  }
-
-  private renderSoloScreen(): void {
-    const maxWidth = Math.min(window.innerWidth - 32, 420);
-    const cellSize = Math.floor(maxWidth / this.COLS);
-
+    this.cleanup();
+    
+    const cellSize = Math.min(60, Math.floor((window.innerWidth - 40) / this.COLS));
+    const boardWidth = this.COLS * cellSize;
+    const boardHeight = this.ROWS * cellSize;
+    
     this.app.innerHTML = `
-      <div class="game-screen solo-screen active">
-        <div class="top-bar">
-          <button class="back-btn" id="back-btn">←</button>
-          <div class="score-board">
-            <span class="score-label">PONTOS:</span>
-            <span class="score-value" id="solo-score">0</span>
+      <div class="game-screen solo-screen">
+        <div class="game-header">
+          <button class="back-btn" id="backBtn">← Menu</button>
+          <div class="score-display">
+            <span id="soloScore">Pontos: 0</span>
           </div>
-          <button class="music-btn" id="music-btn">🔇</button>
         </div>
-
-        <div class="powerup-section">
-          <div class="energy-bar">
-            <div class="energy-slot"></div>
-            <div class="energy-slot"></div>
-            <div class="energy-slot"></div>
-            <div class="energy-slot"></div>
-          </div>
-          <button class="powerup-btn-big" id="powerup-btn" disabled>
-            <span class="powerup-mystery">❓</span>
-            <span class="powerup-reveal" style="display:none"></span>
-          </button>
-          <span class="powerup-hint" id="powerup-hint">Match 4+</span>
-        </div>
-
         <div class="game-container">
-          <canvas id="solo-canvas"></canvas>
+          <canvas id="soloCanvas" width="${boardWidth}" height="${boardHeight}"></canvas>
+          <div class="power-up-area">
+            <button id="powerUpBtn" class="power-up-btn hidden">
+              <span id="powerUpIcon">💥</span>
+              <span id="powerUpName">Power-Up</span>
+            </button>
+          </div>
         </div>
-
-        <p class="instructions">👆 Arraste para mover | Match 4+ = energia!</p>
       </div>
     `;
 
-    this.soloCanvas = document.getElementById('solo-canvas') as HTMLCanvasElement;
+    this.soloCanvas = document.getElementById('soloCanvas') as HTMLCanvasElement;
     this.soloCtx = this.soloCanvas.getContext('2d')!;
 
     this.soloBoard = new Board(this.ROWS, this.COLS, cellSize, {
-      onScoreChange: (s) => this.updateElement('solo-score', s),
+      onScoreChange: (score) => {
+        document.getElementById('soloScore')!.textContent = `Pontos: ${score}`;
+      },
+      onPointsScored: () => {},
       onSwap: () => audio.playSwap(),
       onMatch: () => audio.playMatch(),
-      onCombo: (l) => audio.playCombo(l),
+      onCombo: () => audio.playCombo(),
       onDrop: () => audio.playDrop(),
       onInvalidMove: () => audio.playInvalid(),
-      onNoMoves: () => audio.playNoMoves(),
+      onNoMoves: () => audio.playPowerUp(),
       onPowerUp: () => audio.playPowerUp(),
-      onHint: () => audio.playHint(),
-      onEnergyChange: (e) => this.updateSoloEnergy(e),
-      onPowerUpReady: (p) => this.onSoloPowerUpReady(p),
-      onPowerUpUsed: () => this.onSoloPowerUpUsed(),
+      onHint: () => {},
+      onEnergyChange: this.updatePowerUpUI.bind(this),
+      onPowerUpReady: this.onPowerUpReady.bind(this),
+      onPowerUpUsed: () => {
+        audio.playPowerUp();
+        this.hidePowerUpUI();
+      },
       onMatch4Plus: () => {},
       onMoveComplete: () => {},
     });
 
-    this.soloCanvas.width = this.soloBoard.getWidth();
-    this.soloCanvas.height = this.soloBoard.getHeight();
-
-    this.setupCommonListeners();
-    this.setupSoloPowerUp();
-    this.setupCanvasEvents(this.soloCanvas, this.soloBoard);
-  }
-
-  private updateSoloEnergy(energy: number): void {
-    document.querySelectorAll('.solo-screen .energy-slot').forEach((slot, i) => {
-      slot.classList.toggle('filled', i < energy);
+    this.setupSoloInput();
+    
+    document.getElementById('backBtn')?.addEventListener('click', () => {
+      audio.playSwap();
+      this.showMenu();
     });
-  }
-
-  private onSoloPowerUpReady(powerUp: PowerUpConfig): void {
-    audio.playCombo(2);
-    const btn = document.getElementById('powerup-btn');
-    const hint = document.getElementById('powerup-hint');
-    if (btn && hint) {
-      btn.querySelector('.powerup-mystery')!.setAttribute('style', 'display:none');
-      (btn.querySelector('.powerup-reveal') as HTMLElement).style.display = 'block';
-      (btn.querySelector('.powerup-reveal') as HTMLElement).textContent = powerUp.emoji;
-      btn.removeAttribute('disabled');
-      btn.classList.add('ready');
-      hint.textContent = `${powerUp.name}!`;
-    }
-  }
-
-  private onSoloPowerUpUsed(): void {
-    audio.playPowerUp();
-    const btn = document.getElementById('powerup-btn');
-    const hint = document.getElementById('powerup-hint');
-    if (btn && hint) {
-      btn.setAttribute('disabled', 'true');
-      btn.classList.remove('ready', 'active');
-      btn.querySelector('.powerup-mystery')!.setAttribute('style', 'display:block');
-      (btn.querySelector('.powerup-reveal') as HTMLElement).style.display = 'none';
-      hint.textContent = 'Match 4+';
-      hint.classList.remove('selecting');
-    }
-  }
-
-  private setupSoloPowerUp(): void {
-    document.getElementById('powerup-btn')?.addEventListener('click', () => {
-      if (!this.soloBoard?.hasPowerUp()) return;
-      const btn = document.getElementById('powerup-btn')!;
-      const hint = document.getElementById('powerup-hint')!;
-      
-      if (btn.classList.contains('active')) {
-        this.soloBoard.cancelPowerUpMode();
-        btn.classList.remove('active');
-        hint.classList.remove('selecting');
-        const p = this.soloBoard.getStoredPowerUp();
-        hint.textContent = p ? `${p.name}!` : 'Match 4+';
-      } else if (this.soloBoard.activateStoredPowerUp()) {
-        audio.playSwap();
-        btn.classList.add('active');
-        const p = this.soloBoard.getStoredPowerUp();
-        if (p?.type !== 'shuffle') {
-          hint.textContent = '👆 Alvo!';
-          hint.classList.add('selecting');
+    
+    document.getElementById('powerUpBtn')?.addEventListener('click', () => {
+      if (this.soloBoard?.hasPowerUp()) {
+        if (this.soloBoard.activateStoredPowerUp()) {
+          audio.playPowerUp();
         }
       }
     });
+  }
+
+  private setupSoloInput(): void {
+    if (!this.soloCanvas || !this.soloBoard) return;
+    
+    const canvas = this.soloCanvas;
+    const board = this.soloBoard;
+    
+    canvas.addEventListener('click', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      board.handleClick(x, y);
+    });
+    
+    canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      this.touchStartX = touch.clientX - rect.left;
+      this.touchStartY = touch.clientY - rect.top;
+      this.touchStartTime = Date.now();
+      this.isDragging = false;
+      board.setDragStart(this.touchStartX, this.touchStartY);
+    }, { passive: false });
+    
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+      
+      const dx = x - this.touchStartX;
+      const dy = y - this.touchStartY;
+      
+      if (!this.isDragging && (Math.abs(dx) > this.dragThreshold || Math.abs(dy) > this.dragThreshold)) {
+        this.isDragging = true;
+        let direction: 'left' | 'right' | 'up' | 'down';
+        if (Math.abs(dx) > Math.abs(dy)) {
+          direction = dx > 0 ? 'right' : 'left';
+        } else {
+          direction = dy > 0 ? 'down' : 'up';
+        }
+        board.swipeGem(this.touchStartX, this.touchStartY, direction);
+        board.clearDragStart();
+      }
+    }, { passive: false });
+    
+    canvas.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      if (!this.isDragging) {
+        const elapsed = Date.now() - this.touchStartTime;
+        if (elapsed < 300) {
+          board.handleClick(this.touchStartX, this.touchStartY);
+        }
+      }
+      board.clearDragStart();
+      this.isDragging = false;
+    }, { passive: false });
+  }
+
+  private renderSolo(): void {
+    if (!this.soloBoard || !this.soloCtx) return;
+    this.soloBoard.render(this.soloCtx);
+    this.soloBoard.update();
   }
 
   // ===== VS AI TIME MODE =====
   private startVsAITimeMode(): void {
     this.currentMode = GameMode.VS_AI_TIME;
-    this.timeState = createVsAITimeState();
-    this.renderVsAITimeScreen();
-    this.startTimeTurn();
-  }
-
-  private renderVsAITimeScreen(): void {
-    const maxWidth = Math.min(window.innerWidth - 32, 380);
-    const cellSize = Math.floor(maxWidth / this.COLS);
-
+    this.cleanup();
+    
+    const cellSize = Math.min(45, Math.floor((window.innerWidth - 60) / (this.COLS * 2 + 1)));
+    const boardWidth = this.COLS * cellSize;
+    const boardHeight = this.ROWS * cellSize;
+    
     this.app.innerHTML = `
-      <div class="game-screen vsai-screen active">
-        <div class="vsai-header">
-          <button class="back-btn" id="back-btn">←</button>
-          <div class="player-info ai" id="ai-info">
-            <span class="player-emoji">🤖</span>
-            <span class="player-score" id="ai-score">0</span>
-          </div>
-          <div class="turn-indicator">
-            <span class="turn-timer" id="turn-timer">${TIME_CONFIG.turnDuration}</span>
-            <span class="turn-label" id="turn-label">SUA VEZ</span>
-          </div>
-          <div class="player-info" id="human-info">
-            <span class="player-emoji">👤</span>
-            <span class="player-score" id="human-score">0</span>
-          </div>
-          <button class="music-btn" id="music-btn">🔇</button>
+      <div class="game-screen vs-time-screen">
+        <div class="game-header">
+          <button class="back-btn" id="backBtn">← Menu</button>
+          <div class="vs-timer" id="vsTimer">${TIME_CONFIG.turnDuration}</div>
         </div>
-
-        <div class="board-label">🤖 IA</div>
-        <div class="game-container" id="ai-container">
-          <canvas id="ai-canvas"></canvas>
+        <div class="vs-container">
+          <div class="player-side human-side">
+            <div class="player-label">VOCÊ</div>
+            <div class="player-score" id="humanScore">0</div>
+            <canvas id="humanCanvas" width="${boardWidth}" height="${boardHeight}"></canvas>
+          </div>
+          <div class="vs-divider">VS</div>
+          <div class="player-side ai-side">
+            <div class="player-label">IA</div>
+            <div class="player-score" id="aiScore">0</div>
+            <canvas id="aiCanvas" width="${boardWidth}" height="${boardHeight}"></canvas>
+          </div>
         </div>
-
-        <div class="board-label">👤 Você</div>
-        <div class="game-container" id="human-container">
-          <canvas id="human-canvas"></canvas>
-        </div>
-
-        <p class="instructions">Primeiro a ${TIME_CONFIG.winScore} pts vence!</p>
+        <div class="turn-indicator" id="turnIndicator">Sua vez!</div>
       </div>
     `;
-
-    // Human board
-    this.timeHumanCanvas = document.getElementById('human-canvas') as HTMLCanvasElement;
+    
+    this.timeHumanCanvas = document.getElementById('humanCanvas') as HTMLCanvasElement;
+    this.timeAICanvas = document.getElementById('aiCanvas') as HTMLCanvasElement;
     this.timeHumanCtx = this.timeHumanCanvas.getContext('2d')!;
+    this.timeAICtx = this.timeAICanvas.getContext('2d')!;
+    
+    this.timeState = createVsAITimeState();
+    
+    const updateScores = () => {
+      document.getElementById('humanScore')!.textContent = this.timeState!.humanScore.toString();
+      document.getElementById('aiScore')!.textContent = this.timeState!.aiScore.toString();
+    };
+    
     this.timeHumanBoard = new Board(this.ROWS, this.COLS, cellSize, {
-      onScoreChange: (s) => this.onTimeHumanScore(s),
+      onScoreChange: () => {},
+      onPointsScored: (points) => {
+        if (this.timeState!.currentTurn === Player.HUMAN) {
+          this.timeState!.humanScore += points;
+          updateScores();
+        }
+      },
       onSwap: () => audio.playSwap(),
       onMatch: () => audio.playMatch(),
-      onCombo: (l) => audio.playCombo(l),
+      onCombo: () => audio.playCombo(),
       onDrop: () => audio.playDrop(),
       onInvalidMove: () => audio.playInvalid(),
-      onNoMoves: () => audio.playNoMoves(),
-      onPowerUp: () => audio.playPowerUp(),
+      onNoMoves: () => {},
+      onPowerUp: () => {},
       onHint: () => {},
       onEnergyChange: () => {},
       onPowerUpReady: () => {},
@@ -296,21 +667,22 @@ class Game {
       onMatch4Plus: () => {},
       onMoveComplete: () => {},
     });
-    this.timeHumanCanvas.width = this.timeHumanBoard.getWidth();
-    this.timeHumanCanvas.height = this.timeHumanBoard.getHeight();
-
-    // AI board
-    this.timeAICanvas = document.getElementById('ai-canvas') as HTMLCanvasElement;
-    this.timeAICtx = this.timeAICanvas.getContext('2d')!;
+    
     this.timeAIBoard = new Board(this.ROWS, this.COLS, cellSize, {
-      onScoreChange: (s) => this.onTimeAIScore(s),
-      onSwap: () => {},
+      onScoreChange: () => {},
+      onPointsScored: (points) => {
+        if (this.timeState!.currentTurn === Player.AI) {
+          this.timeState!.aiScore += points;
+          updateScores();
+        }
+      },
+      onSwap: () => audio.playSwap(),
       onMatch: () => audio.playMatch(),
-      onCombo: (l) => audio.playCombo(l),
-      onDrop: () => {},
+      onCombo: () => audio.playCombo(),
+      onDrop: () => audio.playDrop(),
       onInvalidMove: () => {},
-      onNoMoves: () => audio.playNoMoves(),
-      onPowerUp: () => audio.playPowerUp(),
+      onNoMoves: () => {},
+      onPowerUp: () => {},
       onHint: () => {},
       onEnergyChange: () => {},
       onPowerUpReady: () => {},
@@ -318,490 +690,530 @@ class Game {
       onMatch4Plus: () => {},
       onMoveComplete: () => {},
     });
-    this.timeAICanvas.width = this.timeAIBoard.getWidth();
-    this.timeAICanvas.height = this.timeAIBoard.getHeight();
-
-    this.setupCommonListeners();
-    this.setupCanvasEvents(this.timeHumanCanvas, this.timeHumanBoard);
-    this.updateTimeUI();
+    
+    this.setupTimeInput();
+    this.startTimeTimer();
+    
+    document.getElementById('backBtn')?.addEventListener('click', () => {
+      audio.playSwap();
+      this.showMenu();
+    });
   }
-
-  private startTimeTurn(): void {
-    if (!this.timeState || this.timeState.isGameOver) return;
-
-    this.timeState.timeLeft = TIME_CONFIG.turnDuration;
-    this.updateTimeUI();
-
-    if (this.timeState.currentTurn === Player.AI) {
-      document.getElementById('human-container')?.classList.add('disabled');
-      document.getElementById('ai-container')?.classList.remove('disabled');
-      this.runTimeAI();
-    } else {
-      document.getElementById('human-container')?.classList.remove('disabled');
-      document.getElementById('ai-container')?.classList.add('disabled');
-    }
-
+  
+  private setupTimeInput(): void {
+    if (!this.timeHumanCanvas || !this.timeHumanBoard) return;
+    
+    const canvas = this.timeHumanCanvas;
+    const board = this.timeHumanBoard;
+    
+    canvas.addEventListener('click', (e) => {
+      if (this.timeState?.currentTurn !== Player.HUMAN) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      board.handleClick(x, y);
+    });
+    
+    canvas.addEventListener('touchstart', (e) => {
+      if (this.timeState?.currentTurn !== Player.HUMAN) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      this.touchStartX = touch.clientX - rect.left;
+      this.touchStartY = touch.clientY - rect.top;
+      this.touchStartTime = Date.now();
+      this.isDragging = false;
+      board.setDragStart(this.touchStartX, this.touchStartY);
+    }, { passive: false });
+    
+    canvas.addEventListener('touchmove', (e) => {
+      if (this.timeState?.currentTurn !== Player.HUMAN) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+      
+      const dx = x - this.touchStartX;
+      const dy = y - this.touchStartY;
+      
+      if (!this.isDragging && (Math.abs(dx) > this.dragThreshold || Math.abs(dy) > this.dragThreshold)) {
+        this.isDragging = true;
+        let direction: 'left' | 'right' | 'up' | 'down';
+        if (Math.abs(dx) > Math.abs(dy)) {
+          direction = dx > 0 ? 'right' : 'left';
+        } else {
+          direction = dy > 0 ? 'down' : 'up';
+        }
+        board.swipeGem(this.touchStartX, this.touchStartY, direction);
+        board.clearDragStart();
+      }
+    }, { passive: false });
+    
+    canvas.addEventListener('touchend', (e) => {
+      if (this.timeState?.currentTurn !== Player.HUMAN) return;
+      e.preventDefault();
+      if (!this.isDragging) {
+        const elapsed = Date.now() - this.touchStartTime;
+        if (elapsed < 300) {
+          board.handleClick(this.touchStartX, this.touchStartY);
+        }
+      }
+      board.clearDragStart();
+      this.isDragging = false;
+    }, { passive: false });
+  }
+  
+  private startTimeTimer(): void {
+    if (this.timer) clearInterval(this.timer);
+    
     this.timer = window.setInterval(() => {
-      if (!this.timeState) return;
+      if (!this.timeState || this.timeState.isGameOver) return;
+      
       this.timeState.timeLeft--;
-      this.updateElement('turn-timer', this.timeState.timeLeft);
-      document.getElementById('turn-timer')?.classList.toggle('warning', this.timeState.timeLeft <= 3);
-      if (this.timeState.timeLeft <= 0) this.endTimeTurn();
+      document.getElementById('vsTimer')!.textContent = this.timeState.timeLeft.toString();
+      
+      if (this.timeState.timeLeft <= 0) {
+        this.switchTimeTurn();
+      }
     }, 1000);
   }
-
-  private endTimeTurn(): void {
-    this.stopTimer();
-    if (!this.timeState || this.timeState.isGameOver) return;
-    this.timeState.currentTurn = this.timeState.currentTurn === Player.HUMAN ? Player.AI : Player.HUMAN;
-    audio.playSwap();
-    this.startTimeTurn();
-  }
-
-  private async runTimeAI(): Promise<void> {
-    if (!this.timeState || !this.timeAIBoard) return;
+  
+  private switchTimeTurn(): void {
+    if (!this.timeState) return;
     
-    while (this.timeState.timeLeft > 1 && !this.timeState.isGameOver && this.timeState.currentTurn === Player.AI) {
+    this.timeState.currentTurn = this.timeState.currentTurn === Player.HUMAN ? Player.AI : Player.HUMAN;
+    this.timeState.timeLeft = TIME_CONFIG.turnDuration;
+    
+    const indicator = document.getElementById('turnIndicator')!;
+    if (this.timeState.currentTurn === Player.HUMAN) {
+      indicator.textContent = 'Sua vez!';
+      indicator.className = 'turn-indicator human-turn';
+    } else {
+      indicator.textContent = 'Vez da IA...';
+      indicator.className = 'turn-indicator ai-turn';
+      this.doTimeAITurn();
+    }
+    
+    // Check for game over
+    if (this.timeState.humanScore >= TIME_CONFIG.winScore || this.timeState.aiScore >= TIME_CONFIG.winScore) {
+      this.endTimeGame();
+    }
+  }
+  
+  private async doTimeAITurn(): Promise<void> {
+    if (!this.timeAIBoard || !this.timeState) return;
+    
+    while (this.timeState.currentTurn === Player.AI && this.timeState.timeLeft > 0 && !this.timeState.isGameOver) {
       await this.sleep(this.aiPlayer.getThinkingDelay());
-      if (this.timeState.currentTurn !== Player.AI) break;
       
       const grid = this.timeAIBoard.getGrid();
-      const move = this.aiPlayer.findBestMove(grid as GemType[][], this.ROWS, this.COLS);
+      const move = this.aiPlayer.findBestMove(grid, this.ROWS, this.COLS);
       
       if (move) {
         this.timeAIBoard.executeMove(move.from, move.to);
-        await this.sleep(this.aiPlayer.getMoveDelay());
-      } else {
-        await this.sleep(500);
       }
+      
+      await this.sleep(this.aiPlayer.getMoveDelay());
     }
   }
-
-  private onTimeHumanScore(score: number): void {
+  
+  private endTimeGame(): void {
     if (!this.timeState) return;
-    this.timeState.humanScore = score;
-    this.updateElement('human-score', score);
-    this.checkTimeWin();
+    
+    this.timeState.isGameOver = true;
+    if (this.timer) clearInterval(this.timer);
+    
+    const winner = this.timeState.humanScore >= this.timeState.aiScore ? 'Você' : 'IA';
+    const indicator = document.getElementById('turnIndicator')!;
+    indicator.textContent = `${winner} venceu!`;
+    indicator.className = 'turn-indicator game-over';
+    
+    audio.playPowerUp();
   }
-
-  private onTimeAIScore(score: number): void {
-    if (!this.timeState) return;
-    this.timeState.aiScore = score;
-    this.updateElement('ai-score', score);
-    this.checkTimeWin();
-  }
-
-  private checkTimeWin(): void {
-    if (!this.timeState || this.timeState.isGameOver) return;
-    if (this.timeState.humanScore >= TIME_CONFIG.winScore) {
-      this.timeState.isGameOver = true;
-      this.timeState.winner = Player.HUMAN;
-      this.showGameOver(this.timeState.humanScore, this.timeState.aiScore, true, () => this.startVsAITimeMode());
-    } else if (this.timeState.aiScore >= TIME_CONFIG.winScore) {
-      this.timeState.isGameOver = true;
-      this.timeState.winner = Player.AI;
-      this.showGameOver(this.timeState.humanScore, this.timeState.aiScore, false, () => this.startVsAITimeMode());
+  
+  private renderTime(): void {
+    if (this.timeHumanBoard && this.timeHumanCtx) {
+      this.timeHumanBoard.render(this.timeHumanCtx);
+      this.timeHumanBoard.update();
     }
-  }
-
-  private updateTimeUI(): void {
-    if (!this.timeState) return;
-    const isHumanTurn = this.timeState.currentTurn === Player.HUMAN;
-    document.getElementById('human-info')?.classList.toggle('active', isHumanTurn);
-    document.getElementById('ai-info')?.classList.toggle('active', !isHumanTurn);
-    this.updateElement('turn-label', isHumanTurn ? 'SUA VEZ' : 'VEZ DA IA');
-    this.updateElement('turn-timer', this.timeState.timeLeft);
+    if (this.timeAIBoard && this.timeAICtx) {
+      this.timeAIBoard.render(this.timeAICtx);
+      this.timeAIBoard.update();
+    }
   }
 
   // ===== VS AI TURNS MODE =====
   private startVsAITurnsMode(): void {
     this.currentMode = GameMode.VS_AI_TURNS;
-    this.turnsState = createVsAITurnsState();
-    this.renderVsAITurnsScreen();
-    this.startTurnsMoveTimer();
-  }
-
-  private renderVsAITurnsScreen(): void {
-    const maxWidth = Math.min(window.innerWidth - 32, 420);
-    const cellSize = Math.floor(maxWidth / this.COLS);
-
+    this.cleanup();
+    
+    const cellSize = Math.min(50, Math.floor((window.innerWidth - 40) / this.COLS));
+    const boardWidth = this.COLS * cellSize;
+    const boardHeight = this.ROWS * cellSize;
+    
     this.app.innerHTML = `
-      <div class="game-screen vsai-screen turns-shared active">
-        <div class="vsai-header">
-          <button class="back-btn" id="back-btn">←</button>
-          <div class="player-info ai" id="ai-info">
-            <span class="player-emoji">🤖</span>
-            <span class="player-score" id="ai-score">0</span>
+      <div class="game-screen vs-turns-screen">
+        <div class="game-header">
+          <button class="back-btn" id="backBtn">← Menu</button>
+          <div class="vs-scores">
+            <span class="human-score">VOCÊ: <span id="humanScore">0</span></span>
+            <span class="ai-score">IA: <span id="aiScore">0</span></span>
           </div>
-          <div class="turn-indicator turns-mode">
-            <span class="turn-timer" id="turn-timer">${TURNS_CONFIG.moveTimeout}</span>
-            <span class="moves-left" id="moves-left">🎯 ${TURNS_CONFIG.movesPerTurn}</span>
-            <span class="turn-label" id="turn-label">SUA VEZ</span>
-          </div>
-          <div class="player-info" id="human-info">
-            <span class="player-emoji">👤</span>
-            <span class="player-score" id="human-score">0</span>
-          </div>
-          <button class="music-btn" id="music-btn">🔇</button>
         </div>
-
-        <div class="shared-board-container" id="shared-container">
-          <div class="turn-overlay" id="turn-overlay">
-            <span class="turn-overlay-text">VEZ DA IA...</span>
+        <div class="turns-info">
+          <div class="moves-display">
+            <span>Jogadas: </span>
+            <span id="movesLeft">${TURNS_CONFIG.movesPerTurn}</span>
           </div>
-          <canvas id="shared-canvas"></canvas>
+          <div class="timer-display">
+            <span id="moveTimer">${TURNS_CONFIG.moveTimeout}</span>s
+          </div>
         </div>
-
-        <p class="instructions">🎲 Mesmo tabuleiro! Match 4+ = jogada extra!</p>
+        <div class="game-container">
+          <canvas id="turnsCanvas" width="${boardWidth}" height="${boardHeight}"></canvas>
+          <div class="power-up-area">
+            <button id="powerUpBtn" class="power-up-btn hidden">
+              <span id="powerUpIcon">💥</span>
+              <span id="powerUpName">Power-Up</span>
+            </button>
+          </div>
+        </div>
+        <div class="turn-indicator" id="turnIndicator">Sua vez!</div>
       </div>
     `;
-
-    // Shared board - único tabuleiro para ambos
-    this.turnsSharedCanvas = document.getElementById('shared-canvas') as HTMLCanvasElement;
+    
+    this.turnsSharedCanvas = document.getElementById('turnsCanvas') as HTMLCanvasElement;
     this.turnsSharedCtx = this.turnsSharedCanvas.getContext('2d')!;
+    
+    this.turnsState = createVsAITurnsState();
+    
     this.turnsSharedBoard = new Board(this.ROWS, this.COLS, cellSize, {
-      onScoreChange: () => {}, // Não usamos o score do board
-      onPointsScored: (pts) => this.onTurnsPointsScored(pts),
+      onScoreChange: () => {},
+      onPointsScored: (points) => {
+        if (!this.turnsState) return;
+        if (this.turnsState.currentTurn === Player.HUMAN) {
+          this.turnsState.humanScore += points;
+        } else {
+          this.turnsState.aiScore += points;
+        }
+        this.updateTurnsScores();
+      },
       onSwap: () => audio.playSwap(),
       onMatch: () => audio.playMatch(),
-      onCombo: (l) => audio.playCombo(l),
+      onCombo: () => audio.playCombo(),
       onDrop: () => audio.playDrop(),
       onInvalidMove: () => audio.playInvalid(),
-      onNoMoves: () => audio.playNoMoves(),
+      onNoMoves: () => audio.playPowerUp(),
       onPowerUp: () => audio.playPowerUp(),
       onHint: () => {},
-      onEnergyChange: () => {},
-      onPowerUpReady: () => {},
-      onPowerUpUsed: () => {},
-      onMatch4Plus: (count) => this.onTurnsMatch4Plus(count),
-      onMoveComplete: (hadMatch) => this.onTurnsMoveComplete(hadMatch),
+      onEnergyChange: this.updatePowerUpUI.bind(this),
+      onPowerUpReady: this.onPowerUpReady.bind(this),
+      onPowerUpUsed: () => {
+        audio.playPowerUp();
+        this.hidePowerUpUI();
+      },
+      onMatch4Plus: (count) => {
+        if (!this.turnsState) return;
+        if (this.turnsState.currentTurn === Player.HUMAN) {
+          this.turnsState.humanEnergy += count;
+        } else {
+          this.turnsState.aiEnergy += count;
+        }
+      },
+      onMoveComplete: (hadMatch) => {
+        if (!this.turnsState || this.turnsState.isGameOver) return;
+        
+        this.turnsState.movesLeft--;
+        document.getElementById('movesLeft')!.textContent = this.turnsState.movesLeft.toString();
+        
+        if (this.turnsState.movesLeft <= 0) {
+          this.switchTurnsTurn();
+        } else {
+          this.turnsState.timeLeft = TURNS_CONFIG.moveTimeout;
+        }
+      },
     });
+    
     this.turnsSharedBoard.setAllowNoMatchMoves(true);
-    this.turnsSharedCanvas.width = this.turnsSharedBoard.getWidth();
-    this.turnsSharedCanvas.height = this.turnsSharedBoard.getHeight();
-
-    this.setupCommonListeners();
-    this.setupCanvasEvents(this.turnsSharedCanvas, this.turnsSharedBoard);
-    this.updateTurnsUI();
+    
+    this.setupTurnsInput();
+    this.startTurnsTimer();
+    
+    document.getElementById('backBtn')?.addEventListener('click', () => {
+      audio.playSwap();
+      this.showMenu();
+    });
+    
+    document.getElementById('powerUpBtn')?.addEventListener('click', () => {
+      if (this.turnsState?.currentTurn !== Player.HUMAN) return;
+      if (this.turnsSharedBoard?.hasPowerUp()) {
+        if (this.turnsSharedBoard.activateStoredPowerUp()) {
+          audio.playPowerUp();
+        }
+      }
+    });
   }
-
-  private startTurnsMoveTimer(): void {
-    if (!this.turnsState || this.turnsState.isGameOver) return;
-
-    this.turnsState.timeLeft = TURNS_CONFIG.moveTimeout;
-    this.updateTurnsUI();
-
-    const overlay = document.getElementById('turn-overlay');
-    if (this.turnsState.currentTurn === Player.AI) {
-      overlay?.classList.add('active');
-      this.runTurnsAI();
-    } else {
-      overlay?.classList.remove('active');
-    }
-
+  
+  private updateTurnsScores(): void {
+    if (!this.turnsState) return;
+    document.getElementById('humanScore')!.textContent = this.turnsState.humanScore.toString();
+    document.getElementById('aiScore')!.textContent = this.turnsState.aiScore.toString();
+  }
+  
+  private setupTurnsInput(): void {
+    if (!this.turnsSharedCanvas || !this.turnsSharedBoard) return;
+    
+    const canvas = this.turnsSharedCanvas;
+    const board = this.turnsSharedBoard;
+    
+    canvas.addEventListener('click', (e) => {
+      if (this.turnsState?.currentTurn !== Player.HUMAN) return;
+      if (this.turnsState?.waitingForCascade) return;
+      
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      board.handleClick(x, y);
+    });
+    
+    canvas.addEventListener('touchstart', (e) => {
+      if (this.turnsState?.currentTurn !== Player.HUMAN) return;
+      if (this.turnsState?.waitingForCascade) return;
+      
+      e.preventDefault();
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      this.touchStartX = touch.clientX - rect.left;
+      this.touchStartY = touch.clientY - rect.top;
+      this.touchStartTime = Date.now();
+      this.isDragging = false;
+      board.setDragStart(this.touchStartX, this.touchStartY);
+    }, { passive: false });
+    
+    canvas.addEventListener('touchmove', (e) => {
+      if (this.turnsState?.currentTurn !== Player.HUMAN) return;
+      if (this.turnsState?.waitingForCascade) return;
+      
+      e.preventDefault();
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+      
+      const dx = x - this.touchStartX;
+      const dy = y - this.touchStartY;
+      
+      if (!this.isDragging && (Math.abs(dx) > this.dragThreshold || Math.abs(dy) > this.dragThreshold)) {
+        this.isDragging = true;
+        let direction: 'left' | 'right' | 'up' | 'down';
+        if (Math.abs(dx) > Math.abs(dy)) {
+          direction = dx > 0 ? 'right' : 'left';
+        } else {
+          direction = dy > 0 ? 'down' : 'up';
+        }
+        board.swipeGem(this.touchStartX, this.touchStartY, direction);
+        board.clearDragStart();
+      }
+    }, { passive: false });
+    
+    canvas.addEventListener('touchend', (e) => {
+      if (this.turnsState?.currentTurn !== Player.HUMAN) return;
+      if (this.turnsState?.waitingForCascade) return;
+      
+      e.preventDefault();
+      if (!this.isDragging) {
+        const elapsed = Date.now() - this.touchStartTime;
+        if (elapsed < 300) {
+          board.handleClick(this.touchStartX, this.touchStartY);
+        }
+      }
+      board.clearDragStart();
+      this.isDragging = false;
+    }, { passive: false });
+  }
+  
+  private startTurnsTimer(): void {
+    if (this.timer) clearInterval(this.timer);
+    
     this.timer = window.setInterval(() => {
-      if (!this.turnsState) return;
+      if (!this.turnsState || this.turnsState.isGameOver || this.turnsState.waitingForCascade) return;
+      
       this.turnsState.timeLeft--;
-      this.updateElement('turn-timer', this.turnsState.timeLeft);
-      document.getElementById('turn-timer')?.classList.toggle('warning', this.turnsState.timeLeft <= 3);
+      document.getElementById('moveTimer')!.textContent = this.turnsState.timeLeft.toString();
       
       if (this.turnsState.timeLeft <= 0) {
-        // Tempo esgotou - perde uma jogada
         this.turnsState.movesLeft--;
+        document.getElementById('movesLeft')!.textContent = this.turnsState.movesLeft.toString();
+        
         if (this.turnsState.movesLeft <= 0) {
-          this.endTurnsTurn();
+          this.switchTurnsTurn();
         } else {
-          this.stopTimer();
-          this.startTurnsMoveTimer();
+          this.turnsState.timeLeft = TURNS_CONFIG.moveTimeout;
         }
       }
     }, 1000);
   }
-
-  private onTurnsMatch4Plus(count: number): void {
+  
+  private switchTurnsTurn(): void {
     if (!this.turnsState) return;
     
-    // Cada match de 4+ dá uma jogada extra (até o máximo)
-    this.turnsState.movesLeft = Math.min(TURNS_CONFIG.maxMoves, this.turnsState.movesLeft + count);
-    this.updateTurnsUI();
-    audio.playCombo(2); // Som especial
-  }
-
-  private onTurnsPointsScored(points: number): void {
-    if (!this.turnsState) return;
-    
-    // Atribui pontos ao jogador do turno atual
-    if (this.turnsState.currentTurn === Player.HUMAN) {
-      this.turnsState.humanScore += points;
-      this.updateElement('human-score', this.turnsState.humanScore);
-    } else {
-      this.turnsState.aiScore += points;
-      this.updateElement('ai-score', this.turnsState.aiScore);
-    }
-    this.checkTurnsWin();
-  }
-
-  private onTurnsMoveComplete(_hadMatch: boolean): void {
-    if (!this.turnsState) return;
-    
-    // A jogada foi consumida
-    this.turnsState.movesLeft--;
-    
-    if (this.turnsState.movesLeft <= 0) {
-      this.endTurnsTurn();
-    } else if (this.turnsState.currentTurn === Player.HUMAN) {
-      // Humano ainda tem jogadas - reseta timer
-      this.stopTimer();
-      this.startTurnsMoveTimer();
-    }
-    
-    this.updateTurnsUI();
-  }
-
-  private endTurnsTurn(): void {
-    this.stopTimer();
-    if (!this.turnsState || this.turnsState.isGameOver) return;
-    
-    // Troca turno
     this.turnsState.currentTurn = this.turnsState.currentTurn === Player.HUMAN ? Player.AI : Player.HUMAN;
     this.turnsState.movesLeft = TURNS_CONFIG.movesPerTurn;
+    this.turnsState.timeLeft = TURNS_CONFIG.moveTimeout;
     
-    audio.playSwap();
-    this.startTurnsMoveTimer();
+    document.getElementById('movesLeft')!.textContent = this.turnsState.movesLeft.toString();
+    document.getElementById('moveTimer')!.textContent = this.turnsState.timeLeft.toString();
+    
+    const indicator = document.getElementById('turnIndicator')!;
+    if (this.turnsState.currentTurn === Player.HUMAN) {
+      indicator.textContent = 'Sua vez!';
+      indicator.className = 'turn-indicator human-turn';
+    } else {
+      indicator.textContent = 'Vez da IA...';
+      indicator.className = 'turn-indicator ai-turn';
+      this.doTurnsAITurn();
+    }
+    
+    if (this.turnsState.humanScore >= TURNS_CONFIG.winScore || this.turnsState.aiScore >= TURNS_CONFIG.winScore) {
+      this.endTurnsGame();
+    }
   }
-
-  private async runTurnsAI(): Promise<void> {
-    if (!this.turnsState || !this.turnsSharedBoard) return;
+  
+  private async doTurnsAITurn(): Promise<void> {
+    if (!this.turnsSharedBoard || !this.turnsState) return;
     
-    while (this.turnsState.movesLeft > 0 && !this.turnsState.isGameOver && this.turnsState.currentTurn === Player.AI) {
+    for (let i = 0; i < TURNS_CONFIG.movesPerTurn; i++) {
+      if (this.turnsState.currentTurn !== Player.AI || this.turnsState.isGameOver) break;
+      
       await this.sleep(this.aiPlayer.getThinkingDelay());
-      if (this.turnsState.currentTurn !== Player.AI) break;
       
       const grid = this.turnsSharedBoard.getGrid();
-      const move = this.aiPlayer.findBestMove(grid as GemType[][], this.ROWS, this.COLS);
+      const move = this.aiPlayer.findBestMove(grid, this.ROWS, this.COLS);
       
       if (move) {
         this.turnsSharedBoard.executeMove(move.from, move.to);
-        await this.sleep(this.aiPlayer.getMoveDelay() + 400);
-      } else {
-        // Sem boas jogadas, faz qualquer movimento
-        const anyMove = this.findAnyMove(grid as GemType[][]);
-        if (anyMove) {
-          this.turnsSharedBoard.executeMove(anyMove.from, anyMove.to);
-          await this.sleep(this.aiPlayer.getMoveDelay() + 200);
-        }
       }
+      
+      await this.sleep(this.aiPlayer.getMoveDelay());
     }
-  }
-
-  private findAnyMove(_grid: GemType[][]): { from: { row: number; col: number }; to: { row: number; col: number } } | null {
-    for (let row = 0; row < this.ROWS; row++) {
-      for (let col = 0; col < this.COLS; col++) {
-        if (col < this.COLS - 1) {
-          return { from: { row, col }, to: { row, col: col + 1 } };
-        }
-      }
-    }
-    return null;
-  }
-
-  private checkTurnsWin(): void {
-    if (!this.turnsState || this.turnsState.isGameOver) return;
-    if (this.turnsState.humanScore >= TURNS_CONFIG.winScore) {
-      this.turnsState.isGameOver = true;
-      this.showGameOver(this.turnsState.humanScore, this.turnsState.aiScore, true, () => this.startVsAITurnsMode());
-    } else if (this.turnsState.aiScore >= TURNS_CONFIG.winScore) {
-      this.turnsState.isGameOver = true;
-      this.showGameOver(this.turnsState.humanScore, this.turnsState.aiScore, false, () => this.startVsAITurnsMode());
-    }
-  }
-
-  private updateTurnsUI(): void {
-    if (!this.turnsState) return;
-    const isHumanTurn = this.turnsState.currentTurn === Player.HUMAN;
-    document.getElementById('human-info')?.classList.toggle('active', isHumanTurn);
-    document.getElementById('ai-info')?.classList.toggle('active', !isHumanTurn);
-    this.updateElement('turn-label', isHumanTurn ? 'SUA VEZ' : 'VEZ DA IA');
-    this.updateElement('turn-timer', this.turnsState.timeLeft);
-    this.updateElement('moves-left', `🎯 ${this.turnsState.movesLeft}`);
-  }
-
-  // ===== SHARED =====
-  private showGameOver(humanScore: number, aiScore: number, isWin: boolean, playAgain: () => void): void {
-    this.stopTimer();
     
-    const overlay = document.createElement('div');
-    overlay.className = 'game-over-overlay';
-    overlay.innerHTML = `
-      <div class="game-over-content">
-        <h2 class="game-over-title ${isWin ? 'win' : 'lose'}">
-          ${isWin ? '🎉 VOCÊ VENCEU!' : '🤖 IA VENCEU!'}
-        </h2>
-        <p class="game-over-score">👤 ${humanScore} x ${aiScore} 🤖</p>
-        <div class="game-over-buttons">
-          <button class="game-over-btn play-again-btn">Jogar Novamente</button>
-          <button class="game-over-btn menu-return-btn">Menu</button>
-        </div>
-      </div>
-    `;
-
-    overlay.querySelector('.play-again-btn')?.addEventListener('click', () => {
-      audio.playSwap();
-      overlay.remove();
-      playAgain();
-    });
-
-    overlay.querySelector('.menu-return-btn')?.addEventListener('click', () => {
-      audio.playSwap();
-      overlay.remove();
-      this.showMenu();
-    });
-
-    document.body.appendChild(overlay);
-    audio.playCombo(3);
+    if (!this.turnsState.isGameOver && this.turnsState.currentTurn === Player.AI) {
+      this.switchTurnsTurn();
+    }
+  }
+  
+  private endTurnsGame(): void {
+    if (!this.turnsState) return;
+    
+    this.turnsState.isGameOver = true;
+    if (this.timer) clearInterval(this.timer);
+    
+    const winner = this.turnsState.humanScore >= this.turnsState.aiScore ? 'Você' : 'IA';
+    const indicator = document.getElementById('turnIndicator')!;
+    indicator.textContent = `${winner} venceu!`;
+    indicator.className = 'turn-indicator game-over';
+    
+    audio.playPowerUp();
+  }
+  
+  private renderTurns(): void {
+    if (this.turnsSharedBoard && this.turnsSharedCtx) {
+      this.turnsSharedBoard.render(this.turnsSharedCtx);
+      this.turnsSharedBoard.update();
+    }
   }
 
-  private setupCommonListeners(): void {
-    document.getElementById('back-btn')?.addEventListener('click', () => {
-      audio.playSwap();
-      this.showMenu();
-    });
-
-    document.getElementById('music-btn')?.addEventListener('click', (e) => {
-      audio.ensureStarted();
-      const btn = e.target as HTMLElement;
-      const isPlaying = audio.toggleMusic();
-      btn.textContent = isPlaying ? '🔊' : '🔇';
-      btn.classList.toggle('active', isPlaying);
-    });
+  // ===== POWER-UP UI =====
+  private updatePowerUpUI(energy: number, powerUp: PowerUpConfig | null): void {
+    const btn = document.getElementById('powerUpBtn');
+    if (!btn) return;
+    
+    if (powerUp) {
+      btn.classList.remove('hidden');
+      document.getElementById('powerUpIcon')!.textContent = powerUp.icon;
+      document.getElementById('powerUpName')!.textContent = powerUp.name;
+    }
+  }
+  
+  private onPowerUpReady(powerUp: PowerUpConfig): void {
+    const btn = document.getElementById('powerUpBtn');
+    if (!btn) return;
+    
+    btn.classList.remove('hidden');
+    btn.classList.add('ready');
+    document.getElementById('powerUpIcon')!.textContent = powerUp.icon;
+    document.getElementById('powerUpName')!.textContent = powerUp.name;
+    audio.playPowerUp();
+  }
+  
+  private hidePowerUpUI(): void {
+    const btn = document.getElementById('powerUpBtn');
+    if (btn) {
+      btn.classList.add('hidden');
+      btn.classList.remove('ready');
+    }
   }
 
-  private setupCanvasEvents(canvas: HTMLCanvasElement, board: Board): void {
-    const handlers = {
-      start: (x: number, y: number) => {
-        if (this.currentMode === GameMode.VS_AI_TIME && this.timeState?.currentTurn !== Player.HUMAN) return;
-        if (this.currentMode === GameMode.VS_AI_TURNS && this.turnsState?.currentTurn !== Player.HUMAN) return;
-        
-        this.touchStartX = x;
-        this.touchStartY = y;
-        this.touchStartTime = Date.now();
-        this.isDragging = true;
-        const coords = this.getCanvasCoords(x, y, canvas);
-        board.setDragStart(coords.x, coords.y);
-      },
-      move: (x: number, y: number) => {
-        if (!this.isDragging || board.isSelectingTarget()) return;
-        
-        const deltaX = x - this.touchStartX;
-        const deltaY = y - this.touchStartY;
-        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-
-        if (distance >= this.dragThreshold) {
-          const direction = Math.abs(deltaX) > Math.abs(deltaY)
-            ? (deltaX > 0 ? 'right' : 'left')
-            : (deltaY > 0 ? 'down' : 'up');
-          const coords = this.getCanvasCoords(this.touchStartX, this.touchStartY, canvas);
-          board.swipeGem(coords.x, coords.y, direction as 'left' | 'right' | 'up' | 'down');
-          this.isDragging = false;
-          board.clearDragStart();
-        }
-      },
-      end: (x: number, y: number) => {
-        if (!this.isDragging) return;
-        const deltaX = x - this.touchStartX;
-        const deltaY = y - this.touchStartY;
-        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-        const elapsed = Date.now() - this.touchStartTime;
-
-        if (distance < this.dragThreshold && elapsed < 300) {
-          const coords = this.getCanvasCoords(x, y, canvas);
-          board.handleClick(coords.x, coords.y);
-        }
-        this.isDragging = false;
-        board.clearDragStart();
-      }
-    };
-
-    canvas.addEventListener('mousedown', e => handlers.start(e.clientX, e.clientY));
-    canvas.addEventListener('mousemove', e => { if (this.isDragging) handlers.move(e.clientX, e.clientY); });
-    canvas.addEventListener('mouseup', e => handlers.end(e.clientX, e.clientY));
-    canvas.addEventListener('mouseleave', () => { this.isDragging = false; board.clearDragStart(); });
-
-    canvas.addEventListener('touchstart', e => { e.preventDefault(); handlers.start(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
-    canvas.addEventListener('touchmove', e => { e.preventDefault(); handlers.move(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
-    canvas.addEventListener('touchend', e => { e.preventDefault(); handlers.end(e.changedTouches[0].clientX, e.changedTouches[0].clientY); }, { passive: false });
-    canvas.addEventListener('touchcancel', () => { this.isDragging = false; board.clearDragStart(); });
-  }
-
-  private getCanvasCoords(clientX: number, clientY: number, canvas: HTMLCanvasElement): { x: number; y: number } {
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: (clientX - rect.left) * (canvas.width / rect.width),
-      y: (clientY - rect.top) * (canvas.height / rect.height)
-    };
-  }
-
-  private updateElement(id: string, value: string | number): void {
-    const el = document.getElementById(id);
-    if (el) el.textContent = String(value);
-  }
-
-  private stopTimer(): void {
+  // ===== UTILITIES =====
+  private cleanup(): void {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
     }
-  }
-
-  private cleanup(): void {
-    this.stopTimer();
+    
     this.soloBoard = null;
+    this.soloCanvas = null;
+    this.soloCtx = null;
+    
     this.timeHumanBoard = null;
     this.timeAIBoard = null;
-    this.turnsSharedBoard = null;
+    this.timeHumanCanvas = null;
+    this.timeAICanvas = null;
+    this.timeHumanCtx = null;
+    this.timeAICtx = null;
     this.timeState = null;
+    
+    this.turnsSharedBoard = null;
+    this.turnsSharedCanvas = null;
+    this.turnsSharedCtx = null;
     this.turnsState = null;
+    
+    this.battleBoard = null;
+    this.battleCanvas = null;
+    this.battleCtx = null;
+    this.battleUICanvas = null;
+    this.battleUICtx = null;
+    this.battleSystem?.destroy();
+    this.battleSystem = null;
+    this.battleUI = null;
   }
-
+  
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  private gameLoop = (): void => {
-    this.render();
-    requestAnimationFrame(this.gameLoop);
-  };
-
-  private render(): void {
-    if (this.currentMode === GameMode.SOLO && this.soloBoard && this.soloCtx && this.soloCanvas) {
-      this.soloBoard.update();
-      this.soloCtx.clearRect(0, 0, this.soloCanvas.width, this.soloCanvas.height);
-      this.soloBoard.render(this.soloCtx);
+  // ===== GAME LOOP =====
+  private gameLoop(): void {
+    switch (this.currentMode) {
+      case GameMode.SOLO:
+        this.renderSolo();
+        break;
+      case GameMode.VS_AI_TIME:
+        this.renderTime();
+        break;
+      case GameMode.VS_AI_TURNS:
+        if (this.battleBoard) {
+          this.renderBattle();
+        } else {
+          this.renderTurns();
+        }
+        break;
     }
     
-    if (this.currentMode === GameMode.VS_AI_TIME) {
-      if (this.timeHumanBoard && this.timeHumanCtx && this.timeHumanCanvas) {
-        this.timeHumanBoard.update();
-        this.timeHumanCtx.clearRect(0, 0, this.timeHumanCanvas.width, this.timeHumanCanvas.height);
-        this.timeHumanBoard.render(this.timeHumanCtx);
-      }
-      if (this.timeAIBoard && this.timeAICtx && this.timeAICanvas) {
-        this.timeAIBoard.update();
-        this.timeAICtx.clearRect(0, 0, this.timeAICanvas.width, this.timeAICanvas.height);
-        this.timeAIBoard.render(this.timeAICtx);
-      }
-    }
-    
-    if (this.currentMode === GameMode.VS_AI_TURNS) {
-      if (this.turnsSharedBoard && this.turnsSharedCtx && this.turnsSharedCanvas) {
-        this.turnsSharedBoard.update();
-        this.turnsSharedCtx.clearRect(0, 0, this.turnsSharedCanvas.width, this.turnsSharedCanvas.height);
-        this.turnsSharedBoard.render(this.turnsSharedCtx);
-      }
-    }
+    requestAnimationFrame(() => this.gameLoop());
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  new Game();
-});
+// Start the game
+new Game();

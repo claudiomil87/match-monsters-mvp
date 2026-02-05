@@ -6,6 +6,7 @@ export enum GemType {
   ELECTRIC = 'electric',
   PSYCHIC = 'psychic',
   DARK = 'dark',
+  BERRY = 'berry', // Gema especial de cura
 }
 
 export interface Position {
@@ -35,5 +36,6 @@ export const GEM_COLORS: Record<GemType, string> = {
   [GemType.GRASS]: '#66bb6a',
   [GemType.ELECTRIC]: '#ffca28',
   [GemType.PSYCHIC]: '#ab47bc',
-  [GemType.DARK]: '#ec407a',
+  [GemType.DARK]: '#5c6bc0',
+  [GemType.BERRY]: '#ec407a', // Rosa para berry/cura
 };
