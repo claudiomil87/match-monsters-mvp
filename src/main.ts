@@ -9,17 +9,11 @@ import {
   TIME_CONFIG, TURNS_CONFIG 
 } from './GameState';
 import { AIPlayer } from './AIPlayer';
-import { GemType } from './types';
 import { 
-  createRandomTeam, 
-  Team, 
-  Monster,
-  getActiveMonster,
-  countAliveMonsters 
+  createRandomTeam 
 } from './Monster';
 import { 
   BattleSystem, 
-  BattleState, 
   BattleAction,
   DEFAULT_BATTLE_CONFIG 
 } from './BattleSystem';
@@ -148,7 +142,6 @@ class Game {
     const boardWidth = this.COLS * cellSize;
     const boardHeight = this.ROWS * cellSize;
     const uiHeight = 200; // Space for battle UI
-    const totalHeight = uiHeight + boardHeight + 80; // +80 for score/info
     
     this.app.innerHTML = `
       <div class="battle-screen">
@@ -182,17 +175,12 @@ class Game {
       onScoreChange: (score) => {
         document.getElementById('battleScore')!.textContent = `Pontos: ${score}`;
       },
-      onPointsScored: (points) => {
-        // Points will be processed by battle system
+      onPointsScored: () => {
+        // Points are processed via onMatchesFound
       },
       onSwap: () => audio.playSwap(),
       onMatch: () => {
         audio.playMatch();
-        // Process matches in battle system
-        if (this.battleSystem && this.battleBoard) {
-          const grid = this.battleBoard.getGrid();
-          // Convert grid to matches for battle processing
-        }
       },
       onCombo: (level) => {
         audio.playCombo();
@@ -211,11 +199,16 @@ class Game {
         audio.playPowerUp();
         this.hidePowerUpUI();
       },
-      onMatch4Plus: (count) => {},
+      onMatch4Plus: () => {},
       onMoveComplete: (hadMatch) => {
         if (this.battleSystem) {
           this.battleSystem.onMoveMade(hadMatch);
-          this.processBattleMatches();
+        }
+      },
+      onMatchesFound: (matches, comboLevel) => {
+        // Process matches in battle system for damage/healing
+        if (this.battleSystem && matches.length > 0) {
+          this.battleSystem.processMatches(matches, comboLevel);
         }
       },
     });
@@ -231,12 +224,12 @@ class Game {
       {
         onDamage: (action) => this.onBattleDamage(action),
         onHeal: (action) => this.onBattleHeal(action),
-        onEvolve: (name, team) => this.onBattleEvolve(name, team),
+        onEvolve: (name, _team) => this.onBattleEvolve(name, _team),
         onDefeat: (name, team) => this.onBattleDefeat(name, team),
         onTurnChange: (turn) => this.onTurnChange(turn),
         onGameOver: (winner) => this.onBattleGameOver(winner),
-        onTimeUpdate: (time) => {},
-        onMovesUpdate: (moves) => {},
+        onTimeUpdate: () => {},
+        onMovesUpdate: () => {},
       }
     );
     this.battleSystem.setStage(this.battleStage);
@@ -264,20 +257,6 @@ class Game {
         }
       }
     });
-  }
-  
-  private processBattleMatches(): void {
-    if (!this.battleSystem || !this.battleBoard) return;
-    
-    // Get the current board state and find what matched
-    // This is a simplified version - in a real implementation
-    // you'd track matches as they happen in the Board class
-    
-    // For now, we'll simulate based on points scored
-    const score = this.battleBoard.getScore();
-    
-    // The battle system processes damage based on matches
-    // The actual match data would come from the Board
   }
   
   private onBattleDamage(action: BattleAction): void {
@@ -312,7 +291,7 @@ class Game {
     }
   }
   
-  private onBattleDefeat(name: string, team: 'player' | 'enemy'): void {
+  private onBattleDefeat(name: string, _team: 'player' | 'enemy'): void {
     if (this.battleUI) {
       this.battleUI.showActionMessage(`${name} foi derrotado! 💀`, 1500);
     }
@@ -517,6 +496,7 @@ class Game {
       },
       onMatch4Plus: () => {},
       onMoveComplete: () => {},
+      onMatchesFound: () => {},
     });
 
     this.setupSoloInput();
@@ -666,6 +646,7 @@ class Game {
       onPowerUpUsed: () => {},
       onMatch4Plus: () => {},
       onMoveComplete: () => {},
+      onMatchesFound: () => {},
     });
     
     this.timeAIBoard = new Board(this.ROWS, this.COLS, cellSize, {
@@ -689,6 +670,7 @@ class Game {
       onPowerUpUsed: () => {},
       onMatch4Plus: () => {},
       onMoveComplete: () => {},
+      onMatchesFound: () => {},
     });
     
     this.setupTimeInput();
@@ -921,7 +903,7 @@ class Game {
           this.turnsState.aiEnergy += count;
         }
       },
-      onMoveComplete: (hadMatch) => {
+      onMoveComplete: (_hadMatch) => {
         if (!this.turnsState || this.turnsState.isGameOver) return;
         
         this.turnsState.movesLeft--;
@@ -933,6 +915,7 @@ class Game {
           this.turnsState.timeLeft = TURNS_CONFIG.moveTimeout;
         }
       },
+      onMatchesFound: () => {},
     });
     
     this.turnsSharedBoard.setAllowNoMatchMoves(true);
@@ -1125,13 +1108,13 @@ class Game {
   }
 
   // ===== POWER-UP UI =====
-  private updatePowerUpUI(energy: number, powerUp: PowerUpConfig | null): void {
+  private updatePowerUpUI(_energy: number, powerUp: PowerUpConfig | null): void {
     const btn = document.getElementById('powerUpBtn');
     if (!btn) return;
     
     if (powerUp) {
       btn.classList.remove('hidden');
-      document.getElementById('powerUpIcon')!.textContent = powerUp.icon;
+      document.getElementById('powerUpIcon')!.textContent = powerUp.emoji;
       document.getElementById('powerUpName')!.textContent = powerUp.name;
     }
   }
@@ -1142,7 +1125,7 @@ class Game {
     
     btn.classList.remove('hidden');
     btn.classList.add('ready');
-    document.getElementById('powerUpIcon')!.textContent = powerUp.icon;
+    document.getElementById('powerUpIcon')!.textContent = powerUp.emoji;
     document.getElementById('powerUpName')!.textContent = powerUp.name;
     audio.playPowerUp();
   }

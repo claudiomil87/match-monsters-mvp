@@ -6,14 +6,12 @@
 import { GemType } from './types';
 import { 
   Team, 
-  Monster,
   getTypeMultiplier, 
   damageMonster, 
   healMonster,
   addEvolutionProgress,
   getActiveMonster,
   isTeamDefeated,
-  countAliveMonsters,
 } from './Monster';
 
 // Configurações de batalha

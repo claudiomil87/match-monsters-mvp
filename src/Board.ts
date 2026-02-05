@@ -17,6 +17,7 @@ export interface BoardCallbacks {
   onPowerUpUsed: () => void;
   onMatch4Plus: (count: number) => void; // Notifica matches de 4+
   onMoveComplete: (hadMatch: boolean) => void; // Notifica quando uma jogada termina
+  onMatchesFound: (matches: Match[], comboLevel: number) => void; // Matches detalhados para batalha
 }
 
 export class Board {
@@ -74,6 +75,7 @@ export class Board {
       onPowerUpUsed: callbacks.onPowerUpUsed || (() => {}),
       onMatch4Plus: callbacks.onMatch4Plus || (() => {}),
       onMoveComplete: callbacks.onMoveComplete || (() => {}),
+      onMatchesFound: callbacks.onMatchesFound || (() => {}),
     };
     this.grid = [];
     this.initializeBoard();
@@ -455,6 +457,9 @@ export class Board {
       } else {
         this.callbacks.onCombo(this.comboLevel);
       }
+
+      // Notifica matches detalhados para o sistema de batalha
+      this.callbacks.onMatchesFound(matches, this.comboLevel);
 
       // Calcula energia baseado no tamanho dos matches
       let energyGained = 0;

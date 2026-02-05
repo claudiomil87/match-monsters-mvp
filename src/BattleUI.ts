@@ -3,9 +3,9 @@
  * Renderiza monstros, HP, timer, turnos, etc.
  */
 
-import { Team, Monster, getActiveMonster, countAliveMonsters } from './Monster';
-import { BattleState, BattleAction } from './BattleSystem';
-import { GemType, GEM_COLORS } from './types';
+import { Team, Monster } from './Monster';
+import { BattleState } from './BattleSystem';
+import { GEM_COLORS } from './types';
 
 // Configurações visuais
 const UI_CONFIG = {
@@ -47,7 +47,6 @@ interface EvolutionEffect {
 }
 
 export class BattleUI {
-  private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private width: number;
   private height: number;
@@ -62,7 +61,6 @@ export class BattleUI {
   private actionMessageTimer: number = 0;
 
   constructor(canvas: HTMLCanvasElement) {
-    this.canvas = canvas;
     this.ctx = canvas.getContext('2d')!;
     this.width = canvas.width;
     this.height = canvas.height;
