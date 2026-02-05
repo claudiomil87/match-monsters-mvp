@@ -881,31 +881,62 @@ export class Board {
       }
     }
 
-    // Hint animation
+    // Hint animation - IMPROVED
     if (this.hintPosition && this.hintTarget) {
       const pulse = (Math.sin(Date.now() / 200) + 1) / 2;
-      ctx.strokeStyle = `rgba(255, 215, 0, ${0.5 + pulse * 0.5})`;
+      const glowIntensity = 15 + pulse * 15;
+      
+      ctx.shadowColor = '#00ff00';
+      ctx.shadowBlur = glowIntensity;
+      ctx.strokeStyle = `rgba(0, 255, 0, ${0.7 + pulse * 0.3})`;
       ctx.lineWidth = 3;
-      ctx.shadowColor = '#ffd700';
-      ctx.shadowBlur = 10 + pulse * 10;
       
-      // Pisca a gema de origem
-      ctx.strokeRect(
-        this.hintPosition.col * this.cellSize + 3,
-        this.hintPosition.row * this.cellSize + 3,
-        this.cellSize - 6,
-        this.cellSize - 6
-      );
+      // Função para desenhar octágono de hint
+      const drawHintOctagon = (col: number, row: number) => {
+        const x = col * this.cellSize + 4;
+        const y = row * this.cellSize + 4;
+        const s = this.cellSize - 8;
+        const cut = s * 0.2;
+        
+        ctx.beginPath();
+        ctx.moveTo(x + cut, y);
+        ctx.lineTo(x + s - cut, y);
+        ctx.lineTo(x + s, y + cut);
+        ctx.lineTo(x + s, y + s - cut);
+        ctx.lineTo(x + s - cut, y + s);
+        ctx.lineTo(x + cut, y + s);
+        ctx.lineTo(x, y + s - cut);
+        ctx.lineTo(x, y + cut);
+        ctx.closePath();
+        ctx.stroke();
+      };
       
-      // Seta indicando direção
+      // Destaca AMBAS as gemas
+      drawHintOctagon(this.hintPosition.col, this.hintPosition.row);
+      drawHintOctagon(this.hintTarget.col, this.hintTarget.row);
+      
+      // Seta conectando as duas gemas
       const fromX = this.hintPosition.col * this.cellSize + this.cellSize / 2;
       const fromY = this.hintPosition.row * this.cellSize + this.cellSize / 2;
       const toX = this.hintTarget.col * this.cellSize + this.cellSize / 2;
       const toY = this.hintTarget.row * this.cellSize + this.cellSize / 2;
       
+      // Linha com setas nas pontas
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(fromX, fromY);
       ctx.lineTo(toX, toY);
+      ctx.stroke();
+      
+      // Pontas da seta (dupla direção)
+      const angle = Math.atan2(toY - fromY, toX - fromX);
+      const arrowSize = 8;
+      
+      ctx.beginPath();
+      ctx.moveTo(toX, toY);
+      ctx.lineTo(toX - arrowSize * Math.cos(angle - 0.4), toY - arrowSize * Math.sin(angle - 0.4));
+      ctx.moveTo(toX, toY);
+      ctx.lineTo(toX - arrowSize * Math.cos(angle + 0.4), toY - arrowSize * Math.sin(angle + 0.4));
       ctx.stroke();
       
       ctx.shadowBlur = 0;
@@ -1244,21 +1275,31 @@ export class Board {
   }
   
   private lightenColor(hex: string, percent: number): string {
-    const num = parseInt(hex.replace('#', ''), 16);
-    const amt = Math.round(2.55 * percent);
-    const R = Math.min(255, (num >> 16) + amt);
-    const G = Math.min(255, ((num >> 8) & 0x00FF) + amt);
-    const B = Math.min(255, (num & 0x0000FF) + amt);
-    return `#${(0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1)}`;
+    try {
+      const num = parseInt(hex.replace('#', ''), 16);
+      if (isNaN(num)) return hex;
+      const amt = Math.round(2.55 * percent);
+      const R = Math.min(255, (num >> 16) + amt);
+      const G = Math.min(255, ((num >> 8) & 0x00FF) + amt);
+      const B = Math.min(255, (num & 0x0000FF) + amt);
+      return `#${(0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1)}`;
+    } catch {
+      return hex;
+    }
   }
   
   private darkenColor(hex: string, percent: number): string {
-    const num = parseInt(hex.replace('#', ''), 16);
-    const amt = Math.round(2.55 * percent);
-    const R = Math.max(0, (num >> 16) - amt);
-    const G = Math.max(0, ((num >> 8) & 0x00FF) - amt);
-    const B = Math.max(0, (num & 0x0000FF) - amt);
-    return `#${(0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1)}`;
+    try {
+      const num = parseInt(hex.replace('#', ''), 16);
+      if (isNaN(num)) return hex;
+      const amt = Math.round(2.55 * percent);
+      const R = Math.max(0, (num >> 16) - amt);
+      const G = Math.max(0, ((num >> 8) & 0x00FF) - amt);
+      const B = Math.max(0, (num & 0x0000FF) - amt);
+      return `#${(0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1)}`;
+    } catch {
+      return hex;
+    }
   }
 
   public getScore(): number {
