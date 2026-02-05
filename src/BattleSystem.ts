@@ -28,7 +28,7 @@ export interface BattleConfig {
 export const DEFAULT_BATTLE_CONFIG: BattleConfig = {
   turnTimeLimit: 30, // Será ajustado por stage
   movesPerTurn: 2,
-  baseDamagePerGem: 3,
+  baseDamagePerGem: 2,
   healPerBerry: 5,
   comboMultiplier: 0.25,
   evolutionBonus: 10,

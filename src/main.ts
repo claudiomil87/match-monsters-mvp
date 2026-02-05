@@ -143,19 +143,27 @@ class Game {
     const playerTeam = createRandomTeam('Você', '😎', maxTeamSize);
     const enemyTeam = createEnemyTeam(this.battleStage);
     
-    // Calculate dimensions - mobile first!
+    // Calculate dimensions - mobile first, fullscreen optimized!
     const screenWidth = window.innerWidth;
     const screenHeight = window.innerHeight;
     const isMobile = screenWidth < 500;
     
-    // Célula maior no mobile para facilitar o toque
-    const cellSize = Math.min(isMobile ? 48 : 55, Math.floor((screenWidth - 24) / this.COLS));
+    // Footer e safe areas
+    const footerHeight = 50;
+    const safeTop = 10;
+    const safeBottom = 10;
+    
+    // UI de batalha compacta (header + monstros)
+    const uiHeight = isMobile ? 130 : 150;
+    
+    // Calcular tamanho máximo do board para caber na tela
+    const availableForBoard = screenHeight - uiHeight - footerHeight - safeTop - safeBottom;
+    const maxCellByHeight = Math.floor(availableForBoard / this.ROWS);
+    const maxCellByWidth = Math.floor((screenWidth - 16) / this.COLS);
+    const cellSize = Math.min(maxCellByHeight, maxCellByWidth, 58);
+    
     const boardWidth = this.COLS * cellSize;
     const boardHeight = this.ROWS * cellSize;
-    
-    // UI height adapta à tela - mais espaço para os monstros
-    const availableHeight = screenHeight - boardHeight - 100; // footer + padding
-    const uiHeight = Math.max(180, Math.min(280, availableHeight));
     
     this.app.innerHTML = `
       <div class="battle-screen">
