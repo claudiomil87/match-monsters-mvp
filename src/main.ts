@@ -143,46 +143,41 @@ class Game {
     const playerTeam = createRandomTeam('Você', '😎', maxTeamSize);
     const enemyTeam = createEnemyTeam(this.battleStage);
     
-    // Calculate dimensions - mobile first, fullscreen optimized!
+    // Calculate dimensions - mobile first, MAXIMIZE screen usage!
     const screenWidth = window.innerWidth;
     const screenHeight = window.innerHeight;
     const isMobile = screenWidth < 500;
     
-    // Footer e safe areas
-    const footerHeight = 50;
-    const safeTop = 10;
-    const safeBottom = 10;
+    // Minimal margins - maximize game area
+    const footerHeight = 35; // Pontos display
+    const topPadding = 4;
+    const bottomPadding = 4;
     
-    // UI de batalha compacta (header + monstros)
-    const uiHeight = isMobile ? 130 : 150;
+    // UI de batalha compacta (top bar + monstros)
+    const uiHeight = isMobile ? 125 : 140;
     
-    // Calcular tamanho máximo do board para caber na tela
-    const availableForBoard = screenHeight - uiHeight - footerHeight - safeTop - safeBottom;
-    const maxCellByHeight = Math.floor(availableForBoard / this.ROWS);
-    const maxCellByWidth = Math.floor((screenWidth - 16) / this.COLS);
-    const cellSize = Math.min(maxCellByHeight, maxCellByWidth, 58);
+    // Calcular tamanho máximo do board para PREENCHER a tela
+    const availableHeight = screenHeight - uiHeight - footerHeight - topPadding - bottomPadding;
+    const availableWidth = screenWidth - 8; // 4px padding each side
+    
+    const maxCellByHeight = Math.floor(availableHeight / this.ROWS);
+    const maxCellByWidth = Math.floor(availableWidth / this.COLS);
+    const cellSize = Math.min(maxCellByHeight, maxCellByWidth);
     
     const boardWidth = this.COLS * cellSize;
     const boardHeight = this.ROWS * cellSize;
     
     this.app.innerHTML = `
       <div class="battle-screen">
+        <button class="back-btn-mini" id="backBtn">←</button>
         <div class="battle-container">
           <canvas id="battleUICanvas" width="${boardWidth}" height="${uiHeight}"></canvas>
           <canvas id="battleCanvas" width="${boardWidth}" height="${boardHeight}"></canvas>
           <div class="battle-footer">
-            <div class="score-display">
-              <span id="battleScore">Pontos: 0</span>
-            </div>
-            <div class="power-up-area">
-              <button id="powerUpBtn" class="power-up-btn hidden">
-                <span id="powerUpIcon">💥</span>
-                <span id="powerUpName">Power-Up</span>
-              </button>
-            </div>
+            <span id="battleScore">Pontos: 0</span>
+            <button id="powerUpBtn" class="power-up-btn hidden">💥</button>
           </div>
         </div>
-        <button class="back-btn" id="backBtn">← Menu</button>
       </div>
     `;
     

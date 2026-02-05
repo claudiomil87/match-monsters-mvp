@@ -626,16 +626,31 @@ body {
   justify-content: center;
   align-items: center;
   width: 100%;
-  padding: 8px 0;
-  gap: 16px;
+  padding: 6px 0;
+  gap: 12px;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.8);
 }
 
-.battle-footer .score-display {
+.battle-footer #battleScore {
   background: rgba(255, 255, 255, 0.1);
-  padding: 6px 14px;
-  border-radius: 16px;
+  padding: 4px 12px;
+  border-radius: 12px;
   font-weight: 600;
-  font-size: 0.9rem;
+}
+
+.battle-footer .power-up-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.1);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.battle-footer .power-up-btn.hidden {
+  display: none;
 }
 
 #battleUICanvas {
@@ -717,18 +732,34 @@ body {
   }
 }
 
-/* Back button positioning */
-.battle-screen .back-btn {
+/* Back button - minimal */
+.back-btn-mini {
   position: absolute;
-  top: 4px;
-  left: 4px;
+  top: 6px;
+  left: 6px;
   z-index: 100;
-  width: 32px;
-  height: 32px;
-  font-size: 0.9rem;
+  width: 28px;
+  height: 28px;
+  font-size: 1rem;
   padding: 0;
-  background: rgba(0, 0, 0, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.back-btn-mini:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Legacy back button */
+.battle-screen .back-btn {
+  display: none;
 }
 
 /* Responsive adjustments for battle mode */
