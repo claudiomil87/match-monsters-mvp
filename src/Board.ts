@@ -16,7 +16,7 @@ export interface BoardCallbacks {
   onPowerUpReady: (powerUp: PowerUpConfig) => void;
   onPowerUpUsed: () => void;
   onMatch4Plus: (count: number) => void; // Notifica matches de 4+
-  onMoveComplete: (hadMatch: boolean) => void; // Notifica quando uma jogada termina
+  onMoveComplete: (hadMatch: boolean, hadMatch4Plus: boolean) => void; // Notifica quando uma jogada termina
   onMatchesFound: (matches: Match[], comboLevel: number) => void; // Matches detalhados para batalha
 }
 
@@ -31,6 +31,7 @@ export class Board {
   private isAnimating: boolean = false;
   private score: number = 0;
   private comboLevel: number = 0;
+  private hadMatch4Plus: boolean = false; // Rastreia se houve match 4+ neste turno
   private callbacks: BoardCallbacks;
   
   // Hint system
@@ -335,7 +336,7 @@ export class Board {
     if (matches.length === 0) {
       if (this.allowNoMatchMoves) {
         // Modo turnos: permite jogada sem match, mas notifica
-        this.callbacks.onMoveComplete(false);
+        this.callbacks.onMoveComplete(false, false);
       } else {
         // Modo normal: desfaz a jogada
         this.callbacks.onInvalidMove();
@@ -359,7 +360,7 @@ export class Board {
       await this.processMatches();
       
       // Notifica que a jogada terminou (com match)
-      this.callbacks.onMoveComplete(true);
+      this.callbacks.onMoveComplete(true, this.hadMatch4Plus);
       
       // Verifica se ainda há jogadas
       this.checkForNoMoves();
@@ -450,6 +451,7 @@ export class Board {
   private async processMatches(): Promise<void> {
     this.isAnimating = true;
     this.comboLevel = 0;
+    this.hadMatch4Plus = false; // Reset para este processamento
 
     let matches = this.findMatches();
     while (matches.length > 0) {
@@ -486,6 +488,7 @@ export class Board {
       
       // Notifica matches de 4+
       if (match4PlusCount > 0) {
+        this.hadMatch4Plus = true; // Marca que houve match 4+
         this.callbacks.onMatch4Plus(match4PlusCount);
       }
 

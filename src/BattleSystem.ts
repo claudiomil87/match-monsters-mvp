@@ -308,17 +308,21 @@ export class BattleSystem {
   }
 
   // Notifica que uma jogada foi feita
-  public onMoveMade(hadMatch: boolean): void {
+  public onMoveMade(hadMatch: boolean, hadMatch4Plus: boolean = false): void {
     if (this.state.isGameOver) return;
     
-    // Só consome jogada se houve match OU se permitimos jogadas sem match
-    if (hadMatch) {
-      this.state.movesLeft--;
-      this.callbacks.onMovesUpdate?.(this.state.movesLeft);
-      
-      if (this.state.movesLeft <= 0) {
-        this.endTurn();
-      }
+    // Cada movimento consome 1 jogada
+    this.state.movesLeft--;
+    
+    // Match 4+ dá 1 movimento bônus (mas não passa do máximo de 2)
+    if (hadMatch4Plus && hadMatch) {
+      this.state.movesLeft = Math.min(this.config.movesPerTurn, this.state.movesLeft + 1);
+    }
+    
+    this.callbacks.onMovesUpdate?.(this.state.movesLeft);
+    
+    if (this.state.movesLeft <= 0) {
+      this.endTurn();
     }
   }
 

@@ -217,9 +217,9 @@ class Game {
         this.hidePowerUpUI();
       },
       onMatch4Plus: () => {},
-      onMoveComplete: (hadMatch) => {
+      onMoveComplete: (hadMatch, hadMatch4Plus) => {
         if (this.battleSystem) {
-          this.battleSystem.onMoveMade(hadMatch);
+          this.battleSystem.onMoveMade(hadMatch, hadMatch4Plus);
         }
       },
       onMatchesFound: (matches, comboLevel) => {
