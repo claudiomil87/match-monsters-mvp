@@ -270,6 +270,9 @@ class Game {
       
       if (action.type === 'super_effective') {
         this.battleUI.showActionMessage('Super Efetivo! 💥', 1000);
+        audio.playSuperEffective();
+      } else {
+        audio.playBattleDamage();
       }
     }
   }
@@ -279,6 +282,7 @@ class Game {
       const x = action.target === 'player' ? 100 : this.battleUICanvas.width - 100;
       const y = 120;
       this.battleUI.addDamagePopup(x, y, action.amount, true);
+      audio.playHeal();
     }
   }
   
@@ -287,13 +291,14 @@ class Game {
       const x = team === 'player' ? 100 : this.battleUICanvas.width - 100;
       this.battleUI.addEvolutionEffect(x, 100, name);
       this.battleUI.showActionMessage(`${name} EVOLUIU! ✨`, 2000);
-      audio.playPowerUp();
+      audio.playEvolution();
     }
   }
   
   private onBattleDefeat(name: string, _team: 'player' | 'enemy'): void {
     if (this.battleUI) {
       this.battleUI.showActionMessage(`${name} foi derrotado! 💀`, 1500);
+      audio.playDefeat();
     }
   }
   

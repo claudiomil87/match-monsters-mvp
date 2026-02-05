@@ -49,6 +49,9 @@ export class Board {
   
   // Modo de jogo
   private allowNoMatchMoves: boolean = false; // Permite jogadas sem match
+  
+  // Efeitos visuais
+  private highlightedGems: Set<string> = new Set(); // Para highlight de matches
 
   constructor(
     rows: number = 8,
@@ -461,6 +464,9 @@ export class Board {
       // Notifica matches detalhados para o sistema de batalha
       this.callbacks.onMatchesFound(matches, this.comboLevel);
 
+      // Adiciona highlight visual aos matches
+      this.highlightMatches(matches);
+
       // Calcula energia baseado no tamanho dos matches
       let energyGained = 0;
       let match4PlusCount = 0;
@@ -865,6 +871,12 @@ export class Board {
         const gem = this.grid[row][col];
         if (gem) {
           this.renderGem(ctx, gem);
+          
+          // Render highlight se a gema está em um match
+          const key = `${row}-${col}`;
+          if (this.highlightedGems.has(key)) {
+            this.renderMatchHighlight(ctx, col, row);
+          }
         }
       }
     }
@@ -1251,6 +1263,22 @@ export class Board {
     this.allowNoMatchMoves = allow;
   }
 
+  // Adiciona highlight visual aos matches
+  private highlightMatches(matches: Match[]): void {
+    this.highlightedGems.clear();
+    
+    for (const match of matches) {
+      for (const gem of match.gems) {
+        this.highlightedGems.add(`${gem.row}-${gem.col}`);
+      }
+    }
+
+    // Remove highlight após animação
+    setTimeout(() => {
+      this.highlightedGems.clear();
+    }, 400);
+  }
+
   // Para a IA acessar o grid
   public getGrid(): (GemType | null)[][] {
     return this.grid.map(row => row.map(gem => gem?.type || null));
@@ -1260,5 +1288,25 @@ export class Board {
   public executeMove(from: Position, to: Position): void {
     if (this.isAnimating) return;
     this.swapGems(from, to);
+  }
+
+  // Renderiza highlight de match
+  private renderMatchHighlight(ctx: CanvasRenderingContext2D, col: number, row: number): void {
+    const x = col * this.cellSize;
+    const y = row * this.cellSize;
+    
+    // Pulso dourado para matches
+    const pulse = (Math.sin(Date.now() / 150) + 1) / 2;
+    const alpha = 0.3 + pulse * 0.4;
+    
+    ctx.fillStyle = `rgba(255, 215, 0, ${alpha})`;
+    ctx.beginPath();
+    ctx.roundRect(x + 2, y + 2, this.cellSize - 4, this.cellSize - 4, 8);
+    ctx.fill();
+    
+    // Borda brilhante
+    ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
   }
 }

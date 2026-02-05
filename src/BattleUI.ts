@@ -6,6 +6,7 @@
 import { Team, Monster } from './Monster';
 import { BattleState } from './BattleSystem';
 import { GEM_COLORS } from './types';
+import { animationManager, Easing } from './Animations';
 
 // Configurações visuais
 const UI_CONFIG = {
@@ -59,6 +60,10 @@ export class BattleUI {
   // Mensagens de ação
   private actionMessage: string = '';
   private actionMessageTimer: number = 0;
+  
+  // Screen shake
+  private shakeOffset: { x: number; y: number } = { x: 0, y: 0 };
+  private shakeIntensity: number = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -86,6 +91,11 @@ export class BattleUI {
       alpha: 1,
       offsetY: 0,
     });
+
+    // Adiciona animação de shake na tela para dano crítico
+    if (isSuperEffective && !isHeal) {
+      this.addScreenShake(300);
+    }
   }
 
   // Adiciona efeito de evolução
@@ -102,6 +112,26 @@ export class BattleUI {
   public showActionMessage(message: string, duration: number = 2000): void {
     this.actionMessage = message;
     this.actionMessageTimer = duration;
+  }
+
+  // Adiciona screen shake
+  public addScreenShake(duration: number, intensity: number = 5): void {
+    this.shakeIntensity = intensity;
+    
+    animationManager.start(`screenShake`, {
+      duration,
+      easing: Easing.easeOut,
+      onUpdate: (progress) => {
+        const currentIntensity = intensity * (1 - progress);
+        this.shakeOffset.x = (Math.random() - 0.5) * currentIntensity;
+        this.shakeOffset.y = (Math.random() - 0.5) * currentIntensity;
+      },
+      onComplete: () => {
+        this.shakeOffset.x = 0;
+        this.shakeOffset.y = 0;
+        this.shakeIntensity = 0;
+      }
+    });
   }
 
   // Atualiza animações
@@ -135,6 +165,12 @@ export class BattleUI {
     this.lastTime = now;
     
     this.update(deltaTime);
+    
+    // Aplica screen shake
+    if (this.shakeIntensity > 0) {
+      this.ctx.save();
+      this.ctx.translate(this.shakeOffset.x, this.shakeOffset.y);
+    }
     
     // Área acima do board para UI de batalha
     const uiHeight = boardY;
@@ -178,6 +214,11 @@ export class BattleUI {
     // Overlay de fim de jogo
     if (state.isGameOver) {
       this.renderGameOver(state);
+    }
+
+    // Restaura contexto se houve shake
+    if (this.shakeIntensity > 0) {
+      this.ctx.restore();
     }
   }
 
@@ -343,15 +384,27 @@ export class BattleUI {
     ctx.roundRect(spriteX, spriteY, spriteSize, spriteSize, 8);
     ctx.fill();
     
-    // Emoji do monstro
+    // Emoji do monstro (com pulsação se está ativo)
+    const sprite = monster.isEvolved ? monster.data.evolvedSprite : monster.data.sprite;
     ctx.font = `${spriteSize * 0.6}px Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(
-      monster.isEvolved ? monster.data.evolvedSprite : monster.data.sprite,
-      spriteX + spriteSize / 2,
-      spriteY + spriteSize / 2
-    );
+    
+    // Adiciona efeito de pulsação para monstro ativo
+    if (!monster.isDefeated) {
+      const pulse = Math.sin(Date.now() / 1000) * 0.05 + 1;
+      ctx.save();
+      ctx.scale(pulse, pulse);
+      ctx.fillText(
+        sprite,
+        (spriteX + spriteSize / 2) / pulse,
+        (spriteY + spriteSize / 2) / pulse
+      );
+      ctx.restore();
+    } else {
+      ctx.fillStyle = '#666';
+      ctx.fillText(sprite, spriteX + spriteSize / 2, spriteY + spriteSize / 2);
+    }
     
     // Indicador de tipo (ícone pequeno)
     const typeIconSize = 16;
@@ -399,15 +452,30 @@ export class BattleUI {
     ctx.roundRect(infoX, hpBarY, hpBarWidth, hpBarHeight, 4);
     ctx.fill();
     
-    // Preenchimento da barra
-    let hpColor = UI_CONFIG.hpBarFill;
-    if (hpPercent < 0.25) hpColor = UI_CONFIG.hpBarCritical;
-    else if (hpPercent < 0.5) hpColor = UI_CONFIG.hpBarLow;
-    
-    if (!monster.isDefeated) {
-      ctx.fillStyle = hpColor;
+    // Preenchimento da barra com gradiente
+    if (!monster.isDefeated && hpPercent > 0) {
+      const gradient = ctx.createLinearGradient(infoX, hpBarY, infoX + hpBarWidth, hpBarY);
+      
+      if (hpPercent > 0.5) {
+        gradient.addColorStop(0, '#4CAF50');
+        gradient.addColorStop(1, '#66BB6A');
+      } else if (hpPercent > 0.25) {
+        gradient.addColorStop(0, '#FF9800');
+        gradient.addColorStop(1, '#FFB74D');
+      } else {
+        gradient.addColorStop(0, '#F44336');
+        gradient.addColorStop(1, '#EF5350');
+      }
+      
+      ctx.fillStyle = gradient;
       ctx.beginPath();
       ctx.roundRect(infoX, hpBarY, hpBarWidth * hpPercent, hpBarHeight, 4);
+      ctx.fill();
+      
+      // Brilho na barra de HP
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.beginPath();
+      ctx.roundRect(infoX, hpBarY, hpBarWidth * hpPercent, 2, 4);
       ctx.fill();
     }
     
@@ -482,6 +550,21 @@ export class BattleUI {
       const scale = 1 + effect.progress * 0.5;
       const alpha = 1 - (effect.progress / 2);
       
+      // Partículas de evolução
+      for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 2 + effect.progress * 2;
+        const radius = 40 + effect.progress * 20;
+        const particleX = effect.x + Math.cos(angle) * radius;
+        const particleY = effect.y + Math.sin(angle) * radius;
+        
+        ctx.globalAlpha = alpha * 0.7;
+        ctx.fillStyle = UI_CONFIG.evolutionColor;
+        ctx.beginPath();
+        ctx.arc(particleX, particleY, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      // Texto principal
       ctx.globalAlpha = alpha;
       ctx.fillStyle = UI_CONFIG.evolutionColor;
       ctx.font = `bold ${24 * scale}px Arial`;

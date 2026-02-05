@@ -381,6 +381,134 @@ export class AudioManager {
   public isMusicOn(): boolean {
     return this.isMusicPlaying;
   }
+
+  // Novos sons para batalha
+  public playBattleDamage(): void {
+    this.init();
+    if (!this.ctx || !this.sfxGain) return;
+    
+    // Som de impacto para dano
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(200, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.1);
+    
+    gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+    
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.1);
+  }
+
+  public playSuperEffective(): void {
+    this.init();
+    if (!this.ctx || !this.sfxGain) return;
+    
+    // Som especial para super efetivo - acorde ascendente
+    const frequencies = [600, 800, 1000];
+    frequencies.forEach((freq, i) => {
+      setTimeout(() => {
+        const osc = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
+        
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        
+        gain.gain.setValueAtTime(0.2, this.ctx!.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx!.currentTime + 0.2);
+        
+        osc.connect(gain);
+        gain.connect(this.sfxGain!);
+        
+        osc.start();
+        osc.stop(this.ctx!.currentTime + 0.2);
+      }, i * 100);
+    });
+  }
+
+  public playHeal(): void {
+    this.init();
+    if (!this.ctx || !this.sfxGain) return;
+    
+    // Som de cura - tons suaves ascendentes
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(500, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(700, this.ctx.currentTime + 0.3);
+    
+    gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+    
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.3);
+  }
+
+  public playEvolution(): void {
+    this.init();
+    if (!this.ctx || !this.sfxGain) return;
+    
+    // Som épico de evolução - sequência harmoniosa
+    const melody = [300, 400, 500, 600, 800, 1000];
+    melody.forEach((freq, i) => {
+      setTimeout(() => {
+        const osc = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
+        
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        
+        gain.gain.setValueAtTime(0.2, this.ctx!.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx!.currentTime + 0.2);
+        
+        osc.connect(gain);
+        gain.connect(this.sfxGain!);
+        
+        osc.start();
+        osc.stop(this.ctx!.currentTime + 0.2);
+      }, i * 50);
+    });
+  }
+
+  public playDefeat(): void {
+    this.init();
+    if (!this.ctx || !this.sfxGain) return;
+    
+    // Som de derrota - tons descendentes dramáticos
+    const sequence = [
+      { freq: 300, type: 'sawtooth' as OscillatorType, delay: 0 },
+      { freq: 200, type: 'square' as OscillatorType, delay: 150 },
+      { freq: 100, type: 'sine' as OscillatorType, delay: 300 }
+    ];
+    
+    sequence.forEach(({ freq, type, delay }) => {
+      setTimeout(() => {
+        const osc = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
+        
+        osc.type = type;
+        osc.frequency.value = freq;
+        
+        gain.gain.setValueAtTime(0.25, this.ctx!.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx!.currentTime + 0.2);
+        
+        osc.connect(gain);
+        gain.connect(this.sfxGain!);
+        
+        osc.start();
+        osc.stop(this.ctx!.currentTime + 0.2);
+      }, delay);
+    });
+  }
 }
 
 // Singleton
