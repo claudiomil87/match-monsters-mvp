@@ -719,10 +719,16 @@ body {
 
 /* Back button positioning */
 .battle-screen .back-btn {
-  position: fixed;
-  top: 10px;
-  left: 10px;
+  position: absolute;
+  top: 4px;
+  left: 4px;
   z-index: 100;
+  width: 32px;
+  height: 32px;
+  font-size: 0.9rem;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 /* Responsive adjustments for battle mode */

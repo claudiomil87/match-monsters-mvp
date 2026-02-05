@@ -177,22 +177,25 @@ export class BattleUI {
     const H = this.height;
     
     // === LAYOUT COMPACTO EM 2 SEÇÕES ===
-    // Seção 1 (topo, ~35px): Timer + Turno + Stage
-    // Seção 2 (resto): Monstros lado a lado
+    // Seção 1 (topo, 36px): HP + Timer + Stage
+    // Seção 2 (resto): Painéis de monstros lado a lado
     
-    const topBarHeight = 38;
+    const topBarHeight = 36;
     
-    // Fundo escuro
-    ctx.fillStyle = '#1a1a2e';
+    // Fundo escuro com gradiente
+    const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+    bgGrad.addColorStop(0, '#1a1a2e');
+    bgGrad.addColorStop(1, '#16213e');
+    ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, W, H);
     
     // === SEÇÃO 1: TOP BAR ===
     this.renderTopBar(state, topBarHeight);
     
-    // === SEÇÃO 2: ÁREA DOS MONSTROS ===
-    const monstersY = topBarHeight + 4;
-    const monstersH = H - monstersY - 4;
-    const gap = 8;
+    // === SEÇÃO 2: PAINÉIS DE MONSTROS ===
+    const gap = 6;
+    const monstersY = topBarHeight + gap;
+    const monstersH = H - monstersY - gap;
     const panelW = (W - gap * 3) / 2;
     
     // Painel do jogador (esquerda)
@@ -239,73 +242,59 @@ export class BattleUI {
     }
   }
   
-  // Top bar compacta: [HP Você] [Timer/Turno/Stage] [HP Oponente]
+  // Top bar compacta: [HP Você] [Moves] [Timer] [Stage] [HP Oponente]
   private renderTopBar(state: BattleState, height: number): void {
     const ctx = this.ctx;
     const W = this.width;
     
     // Fundo da barra
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.fillRect(0, 0, W, height);
     
     const centerX = W / 2;
     const y = height / 2;
     
-    // === ESQUERDA: HP do jogador ===
+    // === ESQUERDA: HP do jogador (com offset para não colidir com botão Menu) ===
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 12px Arial';
-    ctx.fillText('❤️', 8, y);
     ctx.fillStyle = UI_CONFIG.playerColor;
-    ctx.font = 'bold 16px Arial';
-    ctx.fillText(`${state.playerTeam.currentHp}`, 28, y);
+    ctx.font = 'bold 14px Arial';
+    ctx.fillText(`❤️${state.playerTeam.currentHp}`, 40, y); // Começa após o botão menu
     
-    // === CENTRO: Timer + Turno + Stage ===
-    // Timer círculo
-    const timerR = 14;
+    // === CENTRO: Moves + Timer + Stage ===
+    // Moves (bolinhas) à esquerda do timer
+    for (let i = 0; i < 2; i++) {
+      ctx.beginPath();
+      ctx.arc(centerX - 30 + i * 10, y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = i < state.movesLeft ? '#4CAF50' : '#444';
+      ctx.fill();
+    }
+    
+    // Timer círculo central
+    const timerR = 16;
     ctx.beginPath();
     ctx.arc(centerX, y, timerR, 0, Math.PI * 2);
-    ctx.fillStyle = state.timeLeft <= 5 ? 'rgba(244,67,54,0.3)' : 'rgba(0,0,0,0.5)';
+    ctx.fillStyle = state.timeLeft <= 5 ? 'rgba(244,67,54,0.4)' : 'rgba(0,0,0,0.6)';
     ctx.fill();
     ctx.strokeStyle = state.timeLeft <= 5 ? '#f44336' : state.timeLeft <= 10 ? '#ff9800' : '#4CAF50';
     ctx.lineWidth = 2;
     ctx.stroke();
     
     ctx.fillStyle = state.timeLeft <= 5 ? '#f44336' : '#fff';
-    ctx.font = 'bold 14px Arial';
+    ctx.font = 'bold 16px Arial';
     ctx.textAlign = 'center';
     ctx.fillText(state.timeLeft.toString(), centerX, y + 1);
     
-    // Turno
-    const turnText = state.currentTurn === 'player' ? 'SUA VEZ' : 'OPONENTE';
-    const turnColor = state.currentTurn === 'player' ? UI_CONFIG.playerColor : UI_CONFIG.enemyColor;
-    ctx.fillStyle = turnColor;
-    ctx.font = 'bold 10px Arial';
-    ctx.fillText(turnText, centerX, y + timerR + 10);
-    
-    // Moves (bolinhas)
-    for (let i = 0; i < 2; i++) {
-      ctx.beginPath();
-      ctx.arc(centerX - 35 + i * 12, y, 4, 0, Math.PI * 2);
-      ctx.fillStyle = i < state.movesLeft ? '#4CAF50' : '#333';
-      ctx.fill();
-    }
-    
-    // Stage
+    // Stage à direita do timer
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 10px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText(`⭐${state.stage}`, centerX + 40, y);
+    ctx.font = 'bold 11px Arial';
+    ctx.fillText(`⭐${state.stage}`, centerX + 35, y);
     
     // === DIREITA: HP do oponente ===
     ctx.textAlign = 'right';
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 12px Arial';
-    ctx.fillText('❤️', W - 28, y);
     ctx.fillStyle = UI_CONFIG.enemyColor;
-    ctx.font = 'bold 16px Arial';
-    ctx.fillText(`${state.enemyTeam.currentHp}`, W - 35, y);
+    ctx.font = 'bold 14px Arial';
+    ctx.fillText(`${state.enemyTeam.currentHp}❤️`, W - 8, y);
   }
   
   // Painel de monstros compacto
@@ -319,43 +308,54 @@ export class BattleUI {
     isActive: boolean
   ): void {
     const ctx = this.ctx;
+    const borderColor = side === 'player' ? UI_CONFIG.playerColor : UI_CONFIG.enemyColor;
     
     // Fundo do painel
     const bgColor = isActive 
-      ? (side === 'player' ? 'rgba(76,175,80,0.15)' : 'rgba(244,67,54,0.15)')
-      : 'rgba(0,0,0,0.2)';
+      ? (side === 'player' ? 'rgba(76,175,80,0.2)' : 'rgba(244,67,54,0.2)')
+      : 'rgba(0,0,0,0.25)';
     ctx.fillStyle = bgColor;
     ctx.beginPath();
-    ctx.roundRect(x, y, w, h, 8);
+    ctx.roundRect(x, y, w, h, 10);
     ctx.fill();
     
-    // Borda se ativo
-    if (isActive) {
-      ctx.strokeStyle = side === 'player' ? UI_CONFIG.playerColor : UI_CONFIG.enemyColor;
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
+    // Borda sempre visível, mais forte se ativo
+    ctx.strokeStyle = isActive ? borderColor : 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = isActive ? 2 : 1;
+    ctx.stroke();
     
-    // Nome do time
-    ctx.fillStyle = '#aaa';
-    ctx.font = 'bold 9px Arial';
+    // Header com nome do time
+    const headerH = 18;
+    ctx.fillStyle = borderColor + '60';
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, headerH, [10, 10, 0, 0]);
+    ctx.fill();
+    
+    // Nome do time + indicador de turno
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 10px Arial';
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.fillText(team.playerName.toUpperCase(), x + w/2, y + 3);
+    ctx.textBaseline = 'middle';
+    const label = isActive 
+      ? (side === 'player' ? '▶ VOCÊ' : '▶ ' + team.playerName.toUpperCase())
+      : (side === 'player' ? 'VOCÊ' : team.playerName.toUpperCase());
+    ctx.fillText(label, x + w/2, y + headerH/2);
     
     // Monstros em linha horizontal
-    const monstersY = y + 16;
-    const monstersH = h - 20;
+    const monstersY = y + headerH + 4;
+    const monstersH = h - headerH - 8;
     const count = team.monsters.length;
-    const monsterW = Math.min(50, (w - 8) / count);
-    const startX = x + (w - count * monsterW) / 2;
+    const maxMonsterW = 55;
+    const monsterW = Math.min(maxMonsterW, (w - 12) / count);
+    const totalW = count * monsterW;
+    const startX = x + (w - totalW) / 2;
     
     team.monsters.forEach((monster, i) => {
       this.renderMiniMonster(
         monster,
         startX + i * monsterW,
         monstersY,
-        monsterW - 2,
+        monsterW - 3,
         monstersH
       );
     });
