@@ -174,18 +174,26 @@ export class BattleUI {
     
     // Área acima do board para UI de batalha
     const uiHeight = boardY;
+    const isMobile = this.width < 380;
+    const padding = isMobile ? 6 : 10;
     
-    // Renderiza header (timer, turnos, stage)
-    this.renderHeader(state, uiHeight * 0.15);
+    // Renderiza header (timer, HP geral, turno, stage) - ocupa ~50% do topo
+    const headerHeight = Math.min(95, uiHeight * 0.45);
+    this.renderHeader(state, headerHeight * 0.4);
+    
+    // Área dos monstros começa após o header
+    const monstersStartY = headerHeight + 5;
+    const monstersHeight = uiHeight - monstersStartY - padding;
+    const panelWidth = (this.width - padding * 3) / 2;
     
     // Renderiza jogador (esquerda)
     this.renderTeamPanel(
       state.playerTeam, 
       'player',
-      UI_CONFIG.padding, 
-      uiHeight * 0.2,
-      this.width * 0.45,
-      uiHeight * 0.75,
+      padding, 
+      monstersStartY,
+      panelWidth,
+      monstersHeight,
       state.currentTurn === 'player'
     );
     
@@ -193,10 +201,10 @@ export class BattleUI {
     this.renderTeamPanel(
       state.enemyTeam, 
       'enemy',
-      this.width * 0.55, 
-      uiHeight * 0.2,
-      this.width * 0.45 - UI_CONFIG.padding,
-      uiHeight * 0.75,
+      this.width - padding - panelWidth, 
+      monstersStartY,
+      panelWidth,
+      monstersHeight,
       state.currentTurn === 'enemy'
     );
 
@@ -225,69 +233,104 @@ export class BattleUI {
   private renderHeader(state: BattleState, y: number): void {
     const ctx = this.ctx;
     const centerX = this.width / 2;
+    const isMobile = this.width < 380;
     
-    // Fundo do header
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-    ctx.fillRect(0, 0, this.width, y + 30);
+    // Fundo gradiente do header
+    const headerGradient = ctx.createLinearGradient(0, 0, 0, y + 40);
+    headerGradient.addColorStop(0, 'rgba(20, 20, 40, 0.95)');
+    headerGradient.addColorStop(1, 'rgba(20, 20, 40, 0.7)');
+    ctx.fillStyle = headerGradient;
+    ctx.fillRect(0, 0, this.width, y + 40);
     
-    // Timer
-    const timerSize = 50;
-    ctx.fillStyle = state.timeLeft <= 5 ? UI_CONFIG.timerCritical : 
-                    state.timeLeft <= 10 ? UI_CONFIG.timerWarning : '#fff';
-    ctx.font = `bold ${timerSize * 0.6}px Arial`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    // === LINHA 1: HP dos dois lados + Timer no centro ===
+    const line1Y = 25;
+    
+    // HP do Jogador (esquerda)
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 14px Arial';
+    ctx.fillStyle = '#fff';
+    ctx.fillText('Você', 10, line1Y - 5);
+    
+    ctx.fillStyle = '#ff6b6b';
+    ctx.font = 'bold 18px Arial';
+    ctx.fillText(`❤️ ${state.playerTeam.currentHp}`, 10, line1Y + 15);
+    
+    // HP do Oponente (direita)
+    ctx.textAlign = 'right';
+    ctx.font = 'bold 14px Arial';
+    ctx.fillStyle = '#fff';
+    ctx.fillText('Oponente', this.width - 10, line1Y - 5);
+    
+    ctx.fillStyle = '#ff6b6b';
+    ctx.font = 'bold 18px Arial';
+    ctx.fillText(`❤️ ${state.enemyTeam.currentHp}`, this.width - 10, line1Y + 15);
+    
+    // Timer central grande
+    const timerSize = isMobile ? 44 : 50;
+    const timerY = line1Y + 5;
     
     // Círculo do timer
     ctx.beginPath();
-    ctx.arc(centerX, y, timerSize / 2, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.arc(centerX, timerY, timerSize / 2, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
     ctx.fill();
-    ctx.strokeStyle = state.timeLeft <= 5 ? UI_CONFIG.timerCritical : '#fff';
+    
+    // Borda com cor baseada no tempo
+    ctx.strokeStyle = state.timeLeft <= 5 ? UI_CONFIG.timerCritical : 
+                      state.timeLeft <= 10 ? UI_CONFIG.timerWarning : '#4CAF50';
     ctx.lineWidth = 3;
     ctx.stroke();
     
     // Número do timer
     ctx.fillStyle = state.timeLeft <= 5 ? UI_CONFIG.timerCritical : '#fff';
-    ctx.fillText(state.timeLeft.toString(), centerX, y);
+    ctx.font = `bold ${timerSize * 0.5}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(state.timeLeft.toString(), centerX, timerY);
     
-    // Label "TIMER"
-    ctx.font = 'bold 10px Arial';
-    ctx.fillStyle = '#aaa';
-    ctx.fillText('TIMER', centerX, y - timerSize / 2 - 8);
+    // === LINHA 2: Indicador de turno centralizado ===
+    const line2Y = line1Y + 45;
     
-    // Indicador de turno
+    // Background do turno
     const turnText = state.currentTurn === 'player' ? 'SUA VEZ' : 'VEZ DO OPONENTE';
     const turnColor = state.currentTurn === 'player' ? UI_CONFIG.playerColor : UI_CONFIG.enemyColor;
+    const turnWidth = isMobile ? 120 : 150;
     
-    ctx.fillStyle = turnColor;
-    ctx.font = 'bold 14px Arial';
-    ctx.fillText(turnText, centerX, y + timerSize / 2 + 15);
+    ctx.fillStyle = turnColor + '40'; // 25% opacity
+    ctx.beginPath();
+    ctx.roundRect(centerX - turnWidth/2, line2Y - 12, turnWidth, 24, 12);
+    ctx.fill();
     
-    // MOVES (jogadas restantes)
+    ctx.strokeStyle = turnColor;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 12px Arial';
-    ctx.textAlign = 'left';
-    ctx.fillText(`MOVES`, centerX - 80, y + timerSize / 2 + 15);
+    ctx.font = 'bold 13px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(turnText, centerX, line2Y);
     
-    // Ícones de moves
+    // Moves à esquerda do turno
+    ctx.textAlign = 'right';
+    ctx.font = 'bold 11px Arial';
+    ctx.fillStyle = '#aaa';
+    ctx.fillText('MOVES', centerX - turnWidth/2 - 10, line2Y - 5);
+    
+    // Bolinhas de moves
     for (let i = 0; i < 2; i++) {
-      const moveX = centerX - 55 + i * 20;
-      const moveY = y + timerSize / 2 + 13;
+      const moveX = centerX - turnWidth/2 - 30 + i * 15;
       ctx.beginPath();
-      ctx.arc(moveX, moveY, 6, 0, Math.PI * 2);
+      ctx.arc(moveX, line2Y + 8, 5, 0, Math.PI * 2);
       ctx.fillStyle = i < state.movesLeft ? '#4CAF50' : '#333';
       ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 1;
-      ctx.stroke();
     }
     
-    // Stage/Etapa
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 12px Arial';
-    ctx.fillText(`ETAPA ${state.stage}`, centerX + 80, y + timerSize / 2 + 15);
+    // Stage à direita
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 11px Arial';
+    ctx.fillStyle = '#ffd700';
+    ctx.fillText(`⭐ ETAPA ${state.stage}`, centerX + turnWidth/2 + 10, line2Y);
   }
 
   private renderTeamPanel(
@@ -300,230 +343,164 @@ export class BattleUI {
     isActive: boolean
   ): void {
     const ctx = this.ctx;
+    const isMobile = this.width < 380;
     
-    // Fundo do painel
-    ctx.fillStyle = isActive ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.2)';
+    // Fundo do painel com gradiente
+    const panelGradient = ctx.createLinearGradient(x, y, x, y + height);
+    if (isActive) {
+      const baseColor = side === 'player' ? '76, 175, 80' : '244, 67, 54';
+      panelGradient.addColorStop(0, `rgba(${baseColor}, 0.25)`);
+      panelGradient.addColorStop(1, `rgba(${baseColor}, 0.1)`);
+    } else {
+      panelGradient.addColorStop(0, 'rgba(0, 0, 0, 0.3)');
+      panelGradient.addColorStop(1, 'rgba(0, 0, 0, 0.15)');
+    }
+    
+    ctx.fillStyle = panelGradient;
     ctx.beginPath();
-    ctx.roundRect(x, y, width, height, 10);
+    ctx.roundRect(x, y, width, height, 12);
     ctx.fill();
     
+    // Borda brilhante se ativo
     if (isActive) {
       ctx.strokeStyle = side === 'player' ? UI_CONFIG.playerColor : UI_CONFIG.enemyColor;
       ctx.lineWidth = 2;
+      ctx.shadowColor = side === 'player' ? UI_CONFIG.playerColor : UI_CONFIG.enemyColor;
+      ctx.shadowBlur = 10;
       ctx.stroke();
+      ctx.shadowBlur = 0;
     }
     
-    // Header do jogador
-    const headerHeight = 35;
-    ctx.fillStyle = side === 'player' ? 'rgba(76, 175, 80, 0.3)' : 'rgba(244, 67, 54, 0.3)';
-    ctx.beginPath();
-    ctx.roundRect(x, y, width, headerHeight, [10, 10, 0, 0]);
-    ctx.fill();
-    
-    // Avatar e nome
+    // Nome do time no topo do painel
+    const nameY = y + 14;
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 14px Arial';
+    ctx.font = `bold ${isMobile ? 11 : 13}px Arial`;
     ctx.textAlign = side === 'player' ? 'left' : 'right';
     ctx.textBaseline = 'middle';
     
-    const nameX = side === 'player' ? x + 10 : x + width - 10;
-    ctx.fillText(team.playerName, nameX, y + headerHeight / 2);
+    const nameX = side === 'player' ? x + 8 : x + width - 8;
+    const displayName = team.playerName.length > 10 ? team.playerName.slice(0, 10) : team.playerName;
+    ctx.fillText(displayName, nameX, nameY);
     
-    // HP total da equipe
-    const hpText = `${team.currentHp}`;
-    ctx.fillStyle = '#ff6b6b';
-    ctx.font = 'bold 16px Arial';
-    const hpX = side === 'player' ? x + width - 40 : x + 40;
-    ctx.textAlign = 'center';
-    ctx.fillText('❤️', hpX, y + headerHeight / 2);
-    ctx.fillStyle = '#fff';
-    ctx.fillText(hpText, hpX + 25, y + headerHeight / 2);
-    
-    // Renderiza monstros
-    const monstersY = y + headerHeight + 10;
-    const monstersHeight = height - headerHeight - 20;
-    const monsterHeight = monstersHeight / team.monsters.length;
+    // Renderiza monstros HORIZONTALMENTE (lado a lado)
+    const monstersY = y + 28;
+    const monstersHeight = height - 35;
+    const monsterCount = team.monsters.length;
+    const monsterWidth = Math.min(55, (width - 10) / monsterCount);
+    const startX = side === 'player' ? x + 5 : x + width - 5 - (monsterCount * monsterWidth);
     
     team.monsters.forEach((monster, index) => {
-      this.renderMonster(
+      this.renderMonsterCompact(
         monster,
-        x + 10,
-        monstersY + index * monsterHeight,
-        width - 20,
-        monsterHeight - 5,
+        startX + index * monsterWidth,
+        monstersY,
+        monsterWidth - 4,
+        monstersHeight,
         side
       );
     });
   }
-
-  private renderMonster(
+  
+  // Versão compacta do monstro para mobile
+  private renderMonsterCompact(
     monster: Monster,
     x: number,
     y: number,
     width: number,
     height: number,
-    side: 'player' | 'enemy'
+    _side: 'player' | 'enemy'
   ): void {
     const ctx = this.ctx;
+    const isMobile = this.width < 380;
     
-    // Fundo do card do monstro
-    ctx.fillStyle = monster.isDefeated ? 'rgba(0, 0, 0, 0.5)' : 'rgba(255, 255, 255, 0.1)';
+    // Card do monstro
+    ctx.fillStyle = monster.isDefeated ? 'rgba(0, 0, 0, 0.6)' : 'rgba(255, 255, 255, 0.15)';
     ctx.beginPath();
     ctx.roundRect(x, y, width, height, 8);
     ctx.fill();
     
-    // Sprite do monstro
-    const spriteSize = Math.min(height - 10, 50);
-    const spriteX = side === 'player' ? x + 5 : x + width - spriteSize - 5;
-    const spriteY = y + (height - spriteSize) / 2;
-    
-    // Fundo do elemento
+    // Cor do elemento como borda
     const elementColor = GEM_COLORS[monster.data.element];
-    ctx.fillStyle = monster.isDefeated ? '#333' : elementColor;
-    ctx.beginPath();
-    ctx.roundRect(spriteX, spriteY, spriteSize, spriteSize, 8);
-    ctx.fill();
+    if (!monster.isDefeated) {
+      ctx.strokeStyle = elementColor;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
     
-    // Emoji do monstro (com pulsação se está ativo)
+    // Sprite do monstro (emoji)
+    const spriteSize = Math.min(width - 8, isMobile ? 28 : 35);
     const sprite = monster.isEvolved ? monster.data.evolvedSprite : monster.data.sprite;
-    ctx.font = `${spriteSize * 0.6}px Arial`;
+    ctx.font = `${spriteSize}px Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    
-    // Adiciona efeito de pulsação para monstro ativo
-    if (!monster.isDefeated) {
-      const pulse = Math.sin(Date.now() / 1000) * 0.05 + 1;
-      ctx.save();
-      ctx.scale(pulse, pulse);
-      ctx.fillText(
-        sprite,
-        (spriteX + spriteSize / 2) / pulse,
-        (spriteY + spriteSize / 2) / pulse
-      );
-      ctx.restore();
-    } else {
-      ctx.fillStyle = '#666';
-      ctx.fillText(sprite, spriteX + spriteSize / 2, spriteY + spriteSize / 2);
-    }
-    
-    // Indicador de tipo (ícone pequeno)
-    const typeIconSize = 16;
-    ctx.fillStyle = elementColor;
-    ctx.beginPath();
-    ctx.arc(
-      spriteX + spriteSize - typeIconSize / 2,
-      spriteY + spriteSize - typeIconSize / 2,
-      typeIconSize / 2,
-      0, Math.PI * 2
-    );
-    ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    
-    // Info do monstro
-    const infoX = side === 'player' ? spriteX + spriteSize + 10 : x + 5;
-    const infoWidth = width - spriteSize - 20;
-    
-    // Nome
     ctx.fillStyle = monster.isDefeated ? '#666' : '#fff';
-    ctx.font = 'bold 12px Arial';
-    ctx.textAlign = side === 'player' ? 'left' : 'right';
-    ctx.textBaseline = 'top';
-    ctx.fillText(monster.data.name, infoX + (side === 'player' ? 0 : infoWidth), y + 5);
+    ctx.fillText(sprite, x + width/2, y + spriteSize/2 + 4);
     
-    // EVOLVE! indicator
-    if (!monster.isDefeated && !monster.isEvolved && monster.evolutionProgress >= monster.evolutionThreshold * 0.8) {
-      const pulse = (Math.sin(Date.now() / 200) + 1) / 2;
-      ctx.fillStyle = `rgba(255, 215, 0, ${0.7 + pulse * 0.3})`;
-      ctx.font = 'bold 10px Arial';
-      ctx.fillText('EVOLVE!', infoX + (side === 'player' ? infoWidth : 0), y + 5);
-    }
+    // Nome curto do monstro
+    const shortName = monster.data.name.slice(0, 4);
+    ctx.font = `bold ${isMobile ? 8 : 9}px Arial`;
+    ctx.fillStyle = monster.isDefeated ? '#666' : '#fff';
+    ctx.fillText(shortName, x + width/2, y + spriteSize + 12);
     
-    // Barra de HP
-    const hpBarY = y + 22;
-    const hpBarWidth = infoWidth;
-    const hpBarHeight = 8;
+    // Barra de HP mini
+    const hpBarY = y + spriteSize + 20;
+    const hpBarWidth = width - 8;
+    const hpBarHeight = 6;
     const hpPercent = monster.currentHp / monster.maxHp;
     
     // Fundo da barra
-    ctx.fillStyle = UI_CONFIG.hpBarBg;
+    ctx.fillStyle = '#333';
     ctx.beginPath();
-    ctx.roundRect(infoX, hpBarY, hpBarWidth, hpBarHeight, 4);
+    ctx.roundRect(x + 4, hpBarY, hpBarWidth, hpBarHeight, 3);
     ctx.fill();
     
-    // Preenchimento da barra com gradiente
-    if (!monster.isDefeated && hpPercent > 0) {
-      const gradient = ctx.createLinearGradient(infoX, hpBarY, infoX + hpBarWidth, hpBarY);
-      
-      if (hpPercent > 0.5) {
-        gradient.addColorStop(0, '#4CAF50');
-        gradient.addColorStop(1, '#66BB6A');
-      } else if (hpPercent > 0.25) {
-        gradient.addColorStop(0, '#FF9800');
-        gradient.addColorStop(1, '#FFB74D');
-      } else {
-        gradient.addColorStop(0, '#F44336');
-        gradient.addColorStop(1, '#EF5350');
-      }
-      
-      ctx.fillStyle = gradient;
+    // HP preenchido
+    if (hpPercent > 0) {
+      ctx.fillStyle = hpPercent > 0.5 ? '#4CAF50' : hpPercent > 0.25 ? '#ff9800' : '#f44336';
       ctx.beginPath();
-      ctx.roundRect(infoX, hpBarY, hpBarWidth * hpPercent, hpBarHeight, 4);
-      ctx.fill();
-      
-      // Brilho na barra de HP
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-      ctx.beginPath();
-      ctx.roundRect(infoX, hpBarY, hpBarWidth * hpPercent, 2, 4);
+      ctx.roundRect(x + 4, hpBarY, hpBarWidth * hpPercent, hpBarHeight, 3);
       ctx.fill();
     }
     
-    // Texto HP
-    ctx.fillStyle = monster.isDefeated ? '#666' : '#fff';
-    ctx.font = '10px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText(
-      `${monster.currentHp}/${monster.maxHp}`,
-      infoX + hpBarWidth / 2,
-      hpBarY + hpBarHeight + 10
-    );
+    // HP texto mini
+    ctx.font = `bold ${isMobile ? 8 : 9}px Arial`;
+    ctx.fillStyle = '#fff';
+    ctx.fillText(`${monster.currentHp}/${monster.maxHp}`, x + width/2, hpBarY + hpBarHeight + 8);
     
     // Barra de evolução (se não evoluiu)
     if (!monster.isDefeated && !monster.isEvolved) {
-      const evoBarY = hpBarY + hpBarHeight + 18;
-      const evoBarWidth = infoWidth;
-      const evoBarHeight = 4;
+      const evoBarY = hpBarY + hpBarHeight + 14;
       const evoPercent = monster.evolutionProgress / monster.evolutionThreshold;
       
-      ctx.fillStyle = '#333';
+      ctx.fillStyle = '#222';
       ctx.beginPath();
-      ctx.roundRect(infoX, evoBarY, evoBarWidth, evoBarHeight, 2);
+      ctx.roundRect(x + 4, evoBarY, hpBarWidth, 4, 2);
       ctx.fill();
       
-      ctx.fillStyle = UI_CONFIG.evolutionColor;
-      ctx.beginPath();
-      ctx.roundRect(infoX, evoBarY, evoBarWidth * evoPercent, evoBarHeight, 2);
-      ctx.fill();
+      if (evoPercent > 0) {
+        ctx.fillStyle = UI_CONFIG.evolutionColor;
+        ctx.beginPath();
+        ctx.roundRect(x + 4, evoBarY, hpBarWidth * Math.min(1, evoPercent), 4, 2);
+        ctx.fill();
+      }
+      
+      // EVOLVE! indicator
+      if (evoPercent >= 0.8) {
+        ctx.font = 'bold 7px Arial';
+        ctx.fillStyle = UI_CONFIG.evolutionColor;
+        ctx.fillText('EVOLVE!', x + width/2, evoBarY + 10);
+      }
     }
     
-    // Indicador de derrotado
-    if (monster.isDefeated) {
-      ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
-      ctx.beginPath();
-      ctx.roundRect(x, y, width, height, 8);
-      ctx.fill();
-      
-      ctx.strokeStyle = '#f44336';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(x + 10, y + 10);
-      ctx.lineTo(x + width - 10, y + height - 10);
-      ctx.moveTo(x + width - 10, y + 10);
-      ctx.lineTo(x + 10, y + height - 10);
-      ctx.stroke();
+    // Indicador de evoluído
+    if (monster.isEvolved && !monster.isDefeated) {
+      ctx.font = 'bold 8px Arial';
+      ctx.fillStyle = UI_CONFIG.evolutionColor;
+      ctx.fillText('★ MAX', x + width/2, y + height - 6);
     }
   }
+
+  // Método renderMonster antigo removido - usando renderMonsterCompact para mobile
 
   private renderDamagePopups(): void {
     const ctx = this.ctx;

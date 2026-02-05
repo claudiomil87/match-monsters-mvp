@@ -1,6 +1,7 @@
 // Algoritmo da IA para Match-3
 
 import { GemType } from './types';
+import { getAIDifficulty } from './GameBalance';
 
 interface Position {
   row: number;
@@ -20,14 +21,27 @@ type Grid = (GemType | null)[][];
 export class AIPlayer {
   private thinkingDelay: number = 500; // ms antes de jogar
   private moveDelay: number = 300; // ms entre jogadas
+  private currentStage: number = 1; // Para ajustar dificuldade
 
   constructor() {}
 
-  // Encontra a melhor jogada no grid
+  // Define o stage atual para ajustar dificuldade
+  public setStage(stage: number): void {
+    this.currentStage = stage;
+    
+    // Ajusta delays baseado na dificuldade
+    const difficulty = getAIDifficulty(stage);
+    this.thinkingDelay = Math.round(1000 - (difficulty * 700)); // 1000ms a 300ms
+    this.moveDelay = Math.round(500 - (difficulty * 200)); // 500ms a 300ms
+  }
+
+  // Encontra a melhor jogada no grid (ajustada pela dificuldade)
   public findBestMove(grid: Grid, rows: number, cols: number): Move | null {
     const moves = this.findAllMoves(grid, rows, cols);
     
     if (moves.length === 0) return null;
+    
+    const difficulty = getAIDifficulty(this.currentStage);
 
     // Ordena por score (maior primeiro)
     moves.sort((a, b) => {
@@ -41,11 +55,19 @@ export class AIPlayer {
       return scoreB - scoreA;
     });
 
-    // Adiciona um pouco de aleatoriedade para não ser previsível
-    // 70% escolhe a melhor, 30% escolhe entre as top 3
-    if (moves.length > 1 && Math.random() > 0.7) {
-      const topMoves = moves.slice(0, Math.min(3, moves.length));
-      return topMoves[Math.floor(Math.random() * topMoves.length)];
+    // Aleatoriedade baseada na dificuldade
+    if (moves.length > 1) {
+      const randomChance = 1 - difficulty; // Menor dificuldade = mais aleatório
+      
+      if (Math.random() < randomChance) {
+        // Escolhe uma jogada aleatória (para baixa dificuldade)
+        const randomMoves = moves.slice(Math.floor(moves.length * 0.3));
+        return randomMoves[Math.floor(Math.random() * randomMoves.length)];
+      } else if (Math.random() > 0.8) {
+        // 20% de chance de escolher entre os top 3
+        const topMoves = moves.slice(0, Math.min(3, moves.length));
+        return topMoves[Math.floor(Math.random() * topMoves.length)];
+      }
     }
 
     return moves[0];

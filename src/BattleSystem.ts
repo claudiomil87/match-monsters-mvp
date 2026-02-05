@@ -13,6 +13,7 @@ import {
   getActiveMonster,
   isTeamDefeated,
 } from './Monster';
+import { getBattleTimeLimit, canEvolveMonsters } from './GameBalance';
 
 // Configurações de batalha
 export interface BattleConfig {
@@ -25,7 +26,7 @@ export interface BattleConfig {
 }
 
 export const DEFAULT_BATTLE_CONFIG: BattleConfig = {
-  turnTimeLimit: 20,
+  turnTimeLimit: 30, // Será ajustado por stage
   movesPerTurn: 2,
   baseDamagePerGem: 3,
   healPerBerry: 5,
@@ -274,13 +275,14 @@ export class BattleSystem {
         result.actions.push(defeatAction);
       }
 
-      // Adiciona progresso de evolução para monstros do atacante
-      for (const monster of attackerTeam.monsters) {
-        if (!monster.isDefeated && !monster.isEvolved) {
-          const evolved = addEvolutionProgress(monster, gemType, gemCount >= 4 ? 2 : 1);
-          if (evolved) {
-            result.evolutions.push(monster.data.name);
-            this.callbacks.onEvolve?.(monster.data.name, attacker);
+      // Adiciona progresso de evolução para monstros do atacante (se desbloqueado)
+      if (canEvolveMonsters(this.state.stage)) {
+        for (const monster of attackerTeam.monsters) {
+          if (!monster.isDefeated && !monster.isEvolved) {
+            const evolved = addEvolutionProgress(monster, gemType, gemCount >= 4 ? 2 : 1);
+            if (evolved) {
+              result.evolutions.push(monster.data.name);
+              this.callbacks.onEvolve?.(monster.data.name, attacker);
             
             // Bônus de dano ao evoluir
             const bonusDamage = this.config.evolutionBonus;
@@ -293,6 +295,7 @@ export class BattleSystem {
               message: `${monster.data.name} EVOLUIU! +${bonusDamage} dano bônus!`,
             };
             result.actions.push(evolveAction);
+            }
           }
         }
       }
@@ -415,6 +418,10 @@ export class BattleSystem {
 
   public setStage(stage: number): void {
     this.state.stage = stage;
+    
+    // Ajusta tempo por turno baseado no stage
+    this.config.turnTimeLimit = getBattleTimeLimit(stage);
+    this.state.timeLeft = this.config.turnTimeLimit;
   }
 
   // Destrói o sistema de batalha

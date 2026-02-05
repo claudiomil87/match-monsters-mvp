@@ -17,6 +17,11 @@ import {
   BattleAction,
   DEFAULT_BATTLE_CONFIG 
 } from './BattleSystem';
+import { 
+  createEnemyTeam, 
+  getStageReward, 
+  getMaxTeamSize 
+} from './GameBalance';
 import { BattleUI } from './BattleUI';
 
 class Game {
@@ -133,15 +138,24 @@ class Game {
     this.currentMode = GameMode.VS_AI_TURNS; // Reusing turns mode enum
     this.cleanup();
     
-    // Create teams
-    const playerTeam = createRandomTeam('Você', '😎', 2);
-    const enemyTeam = createRandomTeam('Oponente', '🤖', 2);
+    // Create balanced teams based on current stage
+    const maxTeamSize = getMaxTeamSize(this.battleStage);
+    const playerTeam = createRandomTeam('Você', '😎', maxTeamSize);
+    const enemyTeam = createEnemyTeam(this.battleStage);
     
-    // Calculate dimensions
-    const cellSize = Math.min(50, Math.floor((window.innerWidth - 40) / this.COLS));
+    // Calculate dimensions - mobile first!
+    const screenWidth = window.innerWidth;
+    const screenHeight = window.innerHeight;
+    const isMobile = screenWidth < 500;
+    
+    // Célula maior no mobile para facilitar o toque
+    const cellSize = Math.min(isMobile ? 48 : 55, Math.floor((screenWidth - 24) / this.COLS));
     const boardWidth = this.COLS * cellSize;
     const boardHeight = this.ROWS * cellSize;
-    const uiHeight = 200; // Space for battle UI
+    
+    // UI height adapta à tela - mais espaço para os monstros
+    const availableHeight = screenHeight - boardHeight - 100; // footer + padding
+    const uiHeight = Math.max(180, Math.min(280, availableHeight));
     
     this.app.innerHTML = `
       <div class="battle-screen">
@@ -340,8 +354,21 @@ class Game {
   
   private onBattleGameOver(winner: 'player' | 'enemy'): void {
     if (winner === 'player') {
+      // Verifica se há recompensa para este stage
+      const reward = getStageReward(this.battleStage);
+      if (reward && this.battleUI) {
+        this.battleUI.showActionMessage(reward.unlockMessage, 3000);
+      }
+      
       this.battleStage++;
       audio.playPowerUp();
+      
+      // Auto-restart próxima batalha após 2 segundos
+      setTimeout(() => {
+        if (this.currentMode === GameMode.VS_AI_TURNS && this.battleBoard) {
+          this.startBattleMode();
+        }
+      }, 2000);
     }
   }
   
